@@ -5,6 +5,7 @@ import { useToast } from '@/hooks/use-toast';
 import Tesseract from 'tesseract.js';
 import { NLPEngine, MCQQuestion } from '../utils/nlpEngine';
 import { useAppStore } from '@/store/useAppStore';
+import AIVisionDetector from '../components/AIVisionDetector';
 
 const WorkTestPage = () => {
     const [workText, setWorkText] = useState('');
@@ -15,6 +16,7 @@ const WorkTestPage = () => {
     const [questions, setQuestions] = useState<MCQQuestion[]>([]);
     const [answers, setAnswers] = useState<Record<number, number>>({});
     const [submitted, setSubmitted] = useState(false);
+    const [cheatWarnings, setCheatWarnings] = useState(0);
     const [subjectName, setSubjectName] = useState('');
     const [testName, setTestName] = useState('');
     const { toast } = useToast();
@@ -36,6 +38,7 @@ const WorkTestPage = () => {
         setSubmitted(false);
         setAnswers({});
         setTimeLeft(null);
+        setCheatWarnings(0);
 
         setTimeout(() => {
             const engine = new NLPEngine(workText);
@@ -54,10 +57,10 @@ const WorkTestPage = () => {
             setQuestions(generated);
             setIsGenerating(false);
             setTestGenerated(true);
-            setTimeLeft(600); // 10 minutes (600 seconds)
+            // Timer starts when AI Vision Detector is ready (onReady callback)
             toast({
                 title: "Test Generated",
-                description: "Your AI-powered test is ready based on the provided material!",
+                description: "Your AI-powered test is ready. Starting video feed...",
             });
         }, 1500);
     };
@@ -152,7 +155,25 @@ const WorkTestPage = () => {
         return `${m}:${s.toString().padStart(2, '0')}`;
     };
 
-    const handleSubmit = async (autoSubmit = false) => {
+    const handleCheatWarning = (count: number) => {
+        setCheatWarnings(count);
+        toast({
+            title: "Anti-Cheat Warning",
+            description: `Suspicious activity detected. Warning ${count} of 3.`,
+            variant: "destructive"
+        });
+    };
+
+    const handleMaxWarningsReached = () => {
+        toast({
+            title: "Test Terminated",
+            description: "Multiple cheating attempts detected. Submitting test.",
+            variant: "destructive"
+        });
+        handleSubmit(true, "Anti-cheating system detects cheating");
+    };
+
+    const handleSubmit = async (autoSubmit = false, remarks = "Completed normally") => {
         if (!autoSubmit && Object.keys(answers).length < questions.length) {
             toast({
                 title: "Incomplete Test",
@@ -168,6 +189,7 @@ const WorkTestPage = () => {
             testName: testName.trim() || 'Practice Test',
             score: calculateScore(),
             totalQuestions: questions.length,
+            remarks: autoSubmit && cheatWarnings >= 3 ? "Anti-cheating system detects cheating" : remarks,
             questions: questions.map((q) => ({
                 questionText: q.question,
                 options: q.options,
@@ -404,6 +426,24 @@ const WorkTestPage = () => {
                     )}
                 </motion.div>
             </div>
+
+            {/* Anti-Cheating Camera widget */}
+            {testGenerated && !submitted && (
+                <AIVisionDetector
+                    onReady={() => {
+                        // Start test timer once AIVisionDetector is fully active
+                        if (timeLeft === null) {
+                            setTimeLeft(600); // 10 minutes (600 seconds)
+                            toast({
+                                title: "Timer Started",
+                                description: "AI Vision is active. Good luck on your test!",
+                            });
+                        }
+                    }}
+                    onWarning={handleCheatWarning}
+                    onCheatingMaxReached={handleMaxWarningsReached}
+                />
+            )}
         </div>
     );
 };

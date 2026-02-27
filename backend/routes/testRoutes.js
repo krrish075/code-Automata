@@ -6,13 +6,14 @@ const TestResult = require('../models/TestResult');
 // POST /api/tests - Save a test result
 router.post('/', auth, async (req, res) => {
     try {
-        const { subjectName, testName, score, totalQuestions, questions } = req.body;
+        const { subjectName, testName, score, totalQuestions, questions, remarks } = req.body;
         const testResult = new TestResult({
             userId: req.user.id,
             subjectName,
             testName,
             score,
             totalQuestions,
+            remarks: remarks || 'Completed normally',
             questions
         });
 

@@ -15,6 +15,7 @@ const testResultSchema = new mongoose.Schema({
     testName: { type: String, required: true, default: 'Custom Practice Test' },
     score: { type: Number, required: true },
     totalQuestions: { type: Number, required: true },
+    remarks: { type: String, default: 'Completed normally' },
     questions: [questionSchema]
 }, { timestamps: true });
 
