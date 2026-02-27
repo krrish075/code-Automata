@@ -21,12 +21,12 @@ const DashboardPage = () => {
   const { xp, level, streak, totalStudyMinutes, focusHours, tasksCompleted, totalTasks } = useAppStore();
   const xpInLevel = xp % 500;
   const xpNeeded = 500;
-  const productivityScore = Math.round((tasksCompleted / totalTasks) * 100);
+  const productivityScore = totalTasks > 0 ? Math.round((tasksCompleted / totalTasks) * 100) : 0;
   const quote = quotes[Math.floor(Math.random() * quotes.length)];
 
   const stats = [
-    { icon: Clock, label: "Today's Study", value: '3h 20m', color: 'text-primary' },
-    { icon: Target, label: 'Focus Hours', value: `${focusHours}h`, color: 'text-accent' },
+    { icon: Clock, label: "Today's Study", value: `${Math.floor(totalStudyMinutes / 60)}h ${Math.floor(totalStudyMinutes % 60)}m`, color: 'text-primary' },
+    { icon: Target, label: 'Focus Hours', value: `${Math.round(focusHours * 10) / 10}h`, color: 'text-accent' },
     { icon: Flame, label: 'Streak', value: `${streak} days`, color: 'text-destructive' },
     { icon: TrendingUp, label: 'Productivity', value: `${productivityScore}%`, color: 'text-success' },
   ];
