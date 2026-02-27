@@ -1,0 +1,16 @@
+/* Styling for Focus Mode inside StudySession */
+.focus-mode-container {
+    width: 100%;
+}
+
+.focus-mode-error {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: hsl(var(--destructive));
+    background: hsl(var(--destructive) / 0.1);
+    padding: 12px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+}

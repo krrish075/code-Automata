@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Play, Pause, RotateCcw, Timer, Eye } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
+import FocusMode from '@/components/FocusMode';
 
 const presets = [
   { label: 'Pomodoro 25/5', work: 25, rest: 5 },
@@ -142,7 +143,7 @@ const StudySessionPage = () => {
         </motion.div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-4 mb-8">
           <div className="glass-card p-4 text-center">
             <Timer className="w-5 h-5 text-primary mx-auto mb-2" />
             <p className="font-display text-xl font-bold text-foreground">{Math.floor(totalFocus / 60)}m</p>
@@ -154,6 +155,9 @@ const StudySessionPage = () => {
             <p className="text-xs text-muted-foreground">Attention Score</p>
           </div>
         </div>
+
+        {/* AI Focus Tracker */}
+        <FocusMode isActive={isRunning && isWork} />
       </div>
     </div>
   );
