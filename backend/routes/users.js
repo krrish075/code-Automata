@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
+const StudySession = require('../models/StudySession');
 const auth = require('../middleware/auth');
 
 // Get me
@@ -33,6 +34,29 @@ router.put('/me', auth, async (req, res) => {
         res.json(userResponse);
     } catch (err) {
         res.status(400).json({ message: err.message });
+    }
+});
+
+// Log Study Session
+router.post('/study-session', auth, async (req, res) => {
+    try {
+        const { subject, duration, focusScore } = req.body;
+
+        // duration is expected in minutes from frontend? Standardize to hours based on plan
+        const durationHours = duration / 60;
+
+        const session = new StudySession({
+            studentId: req.user.id,
+            subject: subject || 'General Study',
+            duration: durationHours,
+            focusScore: focusScore || 0,
+            status: 'Completed'
+        });
+
+        await session.save();
+        res.status(201).json(session);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
     }
 });
 

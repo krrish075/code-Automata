@@ -26,7 +26,7 @@ router.post('/register', async (req, res) => {
         await user.save();
 
         const token = getJwtToken(user.id);
-        res.json({ token, user: { id: user.id, name: user.name, email: user.email, xp: user.xp, level: user.level, timetable: user.timetable, isDark: user.isDark } });
+        res.json({ token, role: 'student', user: { id: user.id, name: user.name, email: user.email, xp: user.xp, level: user.level, timetable: user.timetable, isDark: user.isDark } });
     } catch (err) {
         res.status(500).json({ message: 'Server error' });
     }
@@ -46,7 +46,7 @@ router.post('/login', async (req, res) => {
         }
 
         const token = getJwtToken(user.id);
-        res.json({ token, user: { id: user.id, name: user.name, email: user.email, xp: user.xp, level: user.level, timetable: user.timetable, isDark: user.isDark } });
+        res.json({ token, role: 'student', user: { id: user.id, name: user.name, email: user.email, xp: user.xp, level: user.level, timetable: user.timetable, isDark: user.isDark } });
     } catch (err) {
         res.status(500).json({ message: 'Server error' });
     }
@@ -62,7 +62,7 @@ router.post('/guest', async (req, res) => {
         await user.save();
 
         const token = getJwtToken(user.id);
-        res.json({ token, user: { id: user.id, name: user.name, isGuest: user.isGuest, xp: user.xp, level: user.level, timetable: user.timetable, isDark: user.isDark } });
+        res.json({ token, role: 'guest', user: { id: user.id, name: user.name, isGuest: user.isGuest, xp: user.xp, level: user.level, timetable: user.timetable, isDark: user.isDark } });
     } catch (err) {
         res.status(500).json({ message: 'Server error' });
     }

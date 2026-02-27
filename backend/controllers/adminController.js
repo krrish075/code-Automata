@@ -1,0 +1,169 @@
+const User = require('../models/User');
+const StudySession = require('../models/StudySession');
+
+// Admin Login
+exports.adminLogin = async (req, res) => {
+    const { username, password } = req.body;
+
+    // Hardcoded Demo Credentials
+    if (username === 'admin' && password === 'admin@admin') {
+        return res.json({
+            success: true,
+            role: "admin",
+            token: "admin_demo_token_xyz123" // Mock token to bypass middleware if needed
+        });
+    }
+
+    return res.status(401).json({ success: false, message: 'Invalid Admin Credentials' });
+};
+
+// Get All Students
+exports.getStudents = async (req, res) => {
+    try {
+        const students = await User.find({ isGuest: false }).select('-password');
+
+        const enhancedStudents = students.map(s => ({
+            id: s._id,
+            name: s.name,
+            email: s.email,
+            totalStudyHours: Math.floor((s.totalStudyMinutes || 0) / 60),
+            joinedDate: s.createdAt
+        }));
+
+        res.json(enhancedStudents);
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+// Get Single Student Detail
+exports.getStudentById = async (req, res) => {
+    try {
+        const student = await User.findById(req.params.id).select('-password');
+        if (!student) return res.status(404).json({ success: false, message: 'Student not found' });
+
+        const sessions = await StudySession.find({ studentId: req.params.id });
+
+        let completedCount = 0;
+        let missedCount = 0;
+        let totalFocus = 0;
+        let focusScores = [];
+
+        // Group study hours by subject
+        const subjectHours = {};
+
+        // Group study hours by week/date representation
+        const weeklyTrends = {};
+
+        sessions.forEach(s => {
+            if (s.status === 'Completed') {
+                completedCount++;
+                totalFocus += s.duration;
+                if (s.focusScore) focusScores.push(s.focusScore);
+
+                // Subjects Chart Data
+                subjectHours[s.subject] = (subjectHours[s.subject] || 0) + s.duration;
+
+                // Trends Chart Data
+                const dateKey = new Date(s.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+                weeklyTrends[dateKey] = (weeklyTrends[dateKey] || 0) + s.duration;
+            } else {
+                missedCount++;
+            }
+        });
+
+        // Convert grouped objects to array format for Recharts
+        const subjectsStudied = Object.keys(subjectHours).map(key => ({
+            subject: key,
+            hours: subjectHours[key]
+        }));
+
+        const weeklyTrendArr = Object.keys(weeklyTrends).map(key => ({
+            date: key,
+            hours: weeklyTrends[key]
+        })).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+        const focusScoreAverage = focusScores.length > 0
+            ? Math.round(focusScores.reduce((a, b) => a + b, 0) / focusScores.length)
+            : 0;
+
+        res.json({
+            student: {
+                id: student._id,
+                name: student.name,
+                email: student.email,
+                joinedDate: student.createdAt,
+                xp: student.xp,
+                level: student.level,
+                streak: student.streak,
+                tasksCompleted: student.tasksCompleted,
+                totalTasks: student.totalTasks
+            },
+            totalStudyHours: totalFocus,
+            subjectsStudied,
+            weeklyTrendArr,
+            focusScoreAverage,
+            completedSessionsCount: completedCount,
+            missedSessionsCount: missedCount
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+// Get Platform Analytics
+exports.getAnalytics = async (req, res) => {
+    try {
+        const totalStudentsCount = await User.countDocuments({ isGuest: false });
+
+        const sessions = await StudySession.find({ status: 'Completed' });
+
+        let totalStudyHours = 0;
+        const subjectCounts = {};
+        const studentHours = {}; // studentId -> hours
+
+        sessions.forEach(s => {
+            totalStudyHours += s.duration;
+            subjectCounts[s.subject] = (subjectCounts[s.subject] || 0) + s.duration;
+
+            const sId = s.studentId.toString();
+            studentHours[sId] = (studentHours[sId] || 0) + s.duration;
+        });
+
+        const averageStudyHoursPerStudent = totalStudentsCount > 0 ? (totalStudyHours / totalStudentsCount).toFixed(1) : 0;
+
+        // Find most studied subject
+        let mostStudiedSubject = "None";
+        let maxSubHr = 0;
+        for (const [sub, hrs] of Object.entries(subjectCounts)) {
+            if (hrs > maxSubHr) {
+                maxSubHr = hrs;
+                mostStudiedSubject = sub;
+            }
+        }
+
+        // Top 5 Students
+        const sortedStudents = Object.keys(studentHours)
+            .sort((a, b) => studentHours[b] - studentHours[a])
+            .slice(0, 5);
+
+        const topPerformers = await Promise.all(sortedStudents.map(async (id) => {
+            const u = await User.findById(id).select('name');
+            return {
+                name: u ? u.name : 'Unknown',
+                hours: studentHours[id]
+            };
+        }));
+
+        res.json({
+            totalStudents: totalStudentsCount,
+            totalStudyHours,
+            averageStudyHoursPerStudent: parseFloat(averageStudyHoursPerStudent),
+            mostStudiedSubject,
+            topPerformers
+        });
+
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};

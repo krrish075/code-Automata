@@ -10,9 +10,10 @@ const AuthPage = () => {
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [isAdminLogin, setIsAdminLogin] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
 
-    const { login, register, loginGuest } = useAppStore();
+    const { login, register, loginGuest, loginAdmin, role } = useAppStore();
     const navigate = useNavigate();
     const { toast } = useToast();
 
@@ -20,12 +21,16 @@ const AuthPage = () => {
         e.preventDefault();
         setIsLoading(true);
         try {
-            if (isLogin) {
+            if (isAdminLogin) {
+                await loginAdmin(email, password);
+                navigate('/admin');
+            } else if (isLogin) {
                 await login(email, password);
+                navigate('/dashboard');
             } else {
                 await register(name, email, password);
+                navigate('/dashboard');
             }
-            navigate('/dashboard');
         } catch (err: any) {
             toast({
                 title: "Error",
@@ -68,16 +73,31 @@ const AuthPage = () => {
                     </div>
                 </div>
 
+                <div className="flex justify-center gap-4 mb-6">
+                    <button
+                        onClick={() => { setIsAdminLogin(false); setIsLogin(true); }}
+                        className={`text-sm font-semibold pb-1 border-b-2 transition-colors ${!isAdminLogin ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}
+                    >
+                        Student
+                    </button>
+                    <button
+                        onClick={() => setIsAdminLogin(true)}
+                        className={`text-sm font-semibold pb-1 border-b-2 transition-colors ${isAdminLogin ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}
+                    >
+                        Admin
+                    </button>
+                </div>
+
                 <h2 className="text-2xl font-display font-bold text-center text-foreground mb-2">
-                    {isLogin ? 'Welcome Back' : 'Create Account'}
+                    {isAdminLogin ? 'Admin Portal' : (isLogin ? 'Welcome Back' : 'Create Account')}
                 </h2>
                 <p className="text-center text-muted-foreground mb-8 text-sm">
-                    {isLogin ? 'Enter your details to access your planner' : 'Join to start managing your studies smarter'}
+                    {isAdminLogin ? 'Login to manage the platform' : (isLogin ? 'Enter your details to access your planner' : 'Join to start managing your studies smarter')}
                 </p>
 
                 <form onSubmit={handleSubmit} className="space-y-4 mb-6">
                     <AnimatePresence mode="popLayout">
-                        {!isLogin && (
+                        {!isLogin && !isAdminLogin && (
                             <motion.div
                                 initial={{ opacity: 0, height: 0 }}
                                 animate={{ opacity: 1, height: 'auto' }}
@@ -101,16 +121,16 @@ const AuthPage = () => {
                     </AnimatePresence>
 
                     <div className="space-y-2">
-                        <label className="text-sm font-medium text-foreground ml-1">Email</label>
+                        <label className="text-sm font-medium text-foreground ml-1">{isAdminLogin ? 'Username' : 'Email'}</label>
                         <div className="relative">
-                            <Mail className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                            {isAdminLogin ? <User className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" /> : <Mail className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />}
                             <input
-                                type="email"
+                                type={isAdminLogin ? "text" : "email"}
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 required
                                 className="w-full bg-muted/50 border border-border rounded-xl py-2.5 pl-10 pr-4 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
-                                placeholder="you@example.com"
+                                placeholder={isAdminLogin ? "admin" : "you@example.com"}
                             />
                         </div>
                     </div>
@@ -135,40 +155,44 @@ const AuthPage = () => {
                         disabled={isLoading}
                         className="w-full py-2.5 px-4 rounded-xl gradient-bg text-primary-foreground font-semibold text-sm shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 mt-6 disabled:opacity-70"
                     >
-                        {isLoading ? 'Processing...' : (isLogin ? 'Sign In' : 'Sign Up')}
+                        {isLoading ? 'Processing...' : (isAdminLogin ? 'Enter Admin Panel' : (isLogin ? 'Sign In' : 'Sign Up'))}
                         {!isLoading && <ArrowRight className="w-4 h-4" />}
                     </button>
                 </form>
 
-                <div className="relative mb-6">
-                    <div className="absolute inset-0 flex items-center">
-                        <div className="w-full border-t border-border"></div>
-                    </div>
-                    <div className="relative flex justify-center text-xs">
-                        <span className="bg-card px-2 text-muted-foreground">Or</span>
-                    </div>
-                </div>
+                {!isAdminLogin && (
+                    <>
+                        <div className="relative mb-6">
+                            <div className="absolute inset-0 flex items-center">
+                                <div className="w-full border-t border-border"></div>
+                            </div>
+                            <div className="relative flex justify-center text-xs">
+                                <span className="bg-card px-2 text-muted-foreground">Or</span>
+                            </div>
+                        </div>
 
-                <button
-                    type="button"
-                    onClick={handleGuest}
-                    disabled={isLoading}
-                    className="w-full py-2.5 px-4 rounded-xl bg-secondary/10 text-secondary hover:bg-secondary/20 font-semibold text-sm transition-all flex items-center justify-center gap-2 border border-secondary/20 disabled:opacity-70"
-                >
-                    <UserCircle2 className="w-4 h-4" />
-                    Continue as Guest
-                </button>
+                        <button
+                            type="button"
+                            onClick={handleGuest}
+                            disabled={isLoading}
+                            className="w-full py-2.5 px-4 rounded-xl bg-secondary/10 text-secondary hover:bg-secondary/20 font-semibold text-sm transition-all flex items-center justify-center gap-2 border border-secondary/20 disabled:opacity-70"
+                        >
+                            <UserCircle2 className="w-4 h-4" />
+                            Continue as Guest
+                        </button>
 
-                <p className="text-center text-sm text-muted-foreground mt-8">
-                    {isLogin ? "Don't have an account? " : "Already have an account? "}
-                    <button
-                        type="button"
-                        onClick={() => setIsLogin(!isLogin)}
-                        className="text-primary font-semibold hover:underline"
-                    >
-                        {isLogin ? 'Sign up' : 'Sign in'}
-                    </button>
-                </p>
+                        <p className="text-center text-sm text-muted-foreground mt-8">
+                            {isLogin ? "Don't have an account? " : "Already have an account? "}
+                            <button
+                                type="button"
+                                onClick={() => setIsLogin(!isLogin)}
+                                className="text-primary font-semibold hover:underline"
+                            >
+                                {isLogin ? 'Sign up' : 'Sign in'}
+                            </button>
+                        </p>
+                    </>
+                )}
             </motion.div>
         </div>
     );

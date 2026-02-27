@@ -12,16 +12,26 @@ import StudySessionPage from "./pages/StudySessionPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import PreExamPage from "./pages/PreExamPage";
 import AuthPage from "./pages/AuthPage";
+import AdminDashboard from "./pages/AdminDashboard";
+import AdminStudentDetails from "./pages/AdminStudentDetails";
 import NotFound from "./pages/NotFound";
 import { useEffect } from "react";
 import { useAppStore } from "./store/useAppStore";
 
 const queryClient = new QueryClient();
 
-// Protected Route Wrapper
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const isAuthenticated = useAppStore((state) => state.isAuthenticated);
+  const { isAuthenticated, role } = useAppStore();
   if (!isAuthenticated) return <Navigate to="/auth" />;
+  if (role === 'admin') return <Navigate to="/admin" />;
+  return <>{children}</>;
+};
+
+// Admin Route Wrapper
+const AdminRoute = ({ children }: { children: React.ReactNode }) => {
+  const { isAuthenticated, role } = useAppStore();
+  if (!isAuthenticated) return <Navigate to="/auth" />;
+  if (role !== 'admin') return <Navigate to="/dashboard" />;
   return <>{children}</>;
 };
 
@@ -58,6 +68,9 @@ const App = () => {
             <Route path="/study-session" element={<ProtectedRoute><Layout><StudySessionPage /></Layout></ProtectedRoute>} />
             <Route path="/analytics" element={<ProtectedRoute><Layout><AnalyticsPage /></Layout></ProtectedRoute>} />
             <Route path="/pre-exam" element={<ProtectedRoute><Layout><PreExamPage /></Layout></ProtectedRoute>} />
+
+            <Route path="/admin" element={<AdminRoute><Layout><AdminDashboard /></Layout></AdminRoute>} />
+            <Route path="/admin/student/:id" element={<AdminRoute><Layout><AdminStudentDetails /></Layout></AdminRoute>} />
 
             <Route path="*" element={<Layout><NotFound /></Layout>} />
           </Routes>
