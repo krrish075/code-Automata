@@ -3,33 +3,14 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { UploadCloud, FileText, CheckCircle, Zap, RefreshCw, Image as ImageIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import Tesseract from 'tesseract.js';
-
-const mockQuestions = [
-    {
-        id: 1,
-        question: "What is the primary objective of the uploaded material?",
-        options: ["To summarize the text", "To provide a complete overview", "To analyze specific concepts", "To provide references"],
-        answer: 1
-    },
-    {
-        id: 2,
-        question: "Which of the following best describes the key methodology mentioned?",
-        options: ["Algorithmic approach", "Theoretical analysis", "Empirical study", "Literature review"],
-        answer: 0
-    },
-    {
-        id: 3,
-        question: "What conclusion can be drawn from the core arguments?",
-        options: ["The results are inconclusive", "Further research is necessary", "The proposed solution is effective", "None of the above"],
-        answer: 2
-    },
-];
+import { NLPEngine, MCQQuestion } from '../utils/nlpEngine';
 
 const WorkTestPage = () => {
     const [workText, setWorkText] = useState('');
     const [isGenerating, setIsGenerating] = useState(false);
     const [isScanning, setIsScanning] = useState(false);
     const [testGenerated, setTestGenerated] = useState(false);
+    const [questions, setQuestions] = useState<MCQQuestion[]>([]);
     const [answers, setAnswers] = useState<Record<number, number>>({});
     const [submitted, setSubmitted] = useState(false);
     const { toast } = useToast();
@@ -50,15 +31,28 @@ const WorkTestPage = () => {
         setSubmitted(false);
         setAnswers({});
 
-        // Simulate AI Generation
         setTimeout(() => {
+            const engine = new NLPEngine(workText);
+            const generated = engine.generateMCQs(10);
+
+            if (generated.length === 0) {
+                toast({
+                    title: "Not Enough Content",
+                    description: "We couldn't generate questions from the provided text. Please ensure it's detailed enough.",
+                    variant: "destructive"
+                });
+                setIsGenerating(false);
+                return;
+            }
+
+            setQuestions(generated);
             setIsGenerating(false);
             setTestGenerated(true);
             toast({
                 title: "Test Generated",
                 description: "Your AI-powered test is ready based on the provided material!",
             });
-        }, 2500);
+        }, 1500);
     };
 
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -119,14 +113,14 @@ const WorkTestPage = () => {
 
     const calculateScore = () => {
         let score = 0;
-        mockQuestions.forEach(q => {
-            if (answers[q.id] === q.answer) score++;
+        questions.forEach(q => {
+            if (answers[q.id] === q.correctIndex) score++;
         });
         return score;
     };
 
     const handleSubmit = () => {
-        if (Object.keys(answers).length < mockQuestions.length) {
+        if (Object.keys(answers).length < questions.length) {
             toast({
                 title: "Incomplete Test",
                 description: "Please answer all questions before submitting.",
@@ -246,14 +240,14 @@ const WorkTestPage = () => {
                                 </h2>
                                 {submitted && (
                                     <span className="px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-semibold">
-                                        Score: {calculateScore()} / {mockQuestions.length}
+                                        Score: {calculateScore()} / {questions.length}
                                     </span>
                                 )}
                             </div>
 
                             <div className="space-y-6 flex-grow overflow-y-auto pr-2 custom-scrollbar">
                                 <AnimatePresence>
-                                    {mockQuestions.map((q, i) => (
+                                    {questions.map((q, i) => (
                                         <motion.div
                                             key={q.id}
                                             initial={{ opacity: 0, y: 10 }}
@@ -261,11 +255,19 @@ const WorkTestPage = () => {
                                             transition={{ delay: i * 0.1 }}
                                             className="p-4 rounded-xl border border-border bg-background/50"
                                         >
-                                            <h3 className="font-medium text-foreground mb-3">{i + 1}. {q.question}</h3>
+                                            <div className="flex items-center justify-between mb-3">
+                                                <h3 className="font-medium text-foreground pr-4 break-words">{i + 1}. {q.question}</h3>
+                                                <span className={`text-xs px-2 py-1 rounded-md border flex-shrink-0 ${q.difficulty === 'Hard' ? 'bg-destructive/10 text-destructive border-destructive' :
+                                                        q.difficulty === 'Easy' ? 'bg-success/10 text-success border-success' :
+                                                            'bg-primary/10 text-primary border-primary'
+                                                    }`}>
+                                                    {q.difficulty}
+                                                </span>
+                                            </div>
                                             <div className="space-y-2">
                                                 {q.options.map((opt, optIdx) => {
                                                     const isSelected = answers[q.id] === optIdx;
-                                                    const isCorrect = q.answer === optIdx;
+                                                    const isCorrect = q.correctIndex === optIdx;
                                                     const showCorrect = submitted && isCorrect;
                                                     const showWrong = submitted && isSelected && !isCorrect;
 
@@ -295,6 +297,16 @@ const WorkTestPage = () => {
                                                     );
                                                 })}
                                             </div>
+                                            {submitted && (
+                                                <motion.div
+                                                    initial={{ opacity: 0, height: 0 }}
+                                                    animate={{ opacity: 1, height: 'auto' }}
+                                                    className="mt-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg text-sm text-foreground/80 italic flex items-start gap-2"
+                                                >
+                                                    <span>💡</span>
+                                                    <span>{q.explanation}</span>
+                                                </motion.div>
+                                            )}
                                         </motion.div>
                                     ))}
                                 </AnimatePresence>
