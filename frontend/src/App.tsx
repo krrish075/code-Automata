@@ -8,7 +8,7 @@ import HomePage from "./pages/HomePage";
 import DashboardPage from "./pages/DashboardPage";
 import TimetablePage from "./pages/TimetablePage";
 import StudyPlannerPage from "./pages/StudyPlannerPage";
-import StudySessionPage from "./pages/StudySessionPage";
+import WorkTestPage from "./pages/WorkTestPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import PreExamPage from "./pages/PreExamPage";
 import AuthPage from "./pages/AuthPage";
@@ -65,7 +65,7 @@ const App = () => {
             <Route path="/dashboard" element={<ProtectedRoute><Layout><DashboardPage /></Layout></ProtectedRoute>} />
             <Route path="/timetable" element={<ProtectedRoute><Layout><TimetablePage /></Layout></ProtectedRoute>} />
             <Route path="/study-planner" element={<ProtectedRoute><Layout><StudyPlannerPage /></Layout></ProtectedRoute>} />
-            <Route path="/study-session" element={<ProtectedRoute><Layout><StudySessionPage /></Layout></ProtectedRoute>} />
+            <Route path="/work-test" element={<ProtectedRoute><Layout><WorkTestPage /></Layout></ProtectedRoute>} />
             <Route path="/analytics" element={<ProtectedRoute><Layout><AnalyticsPage /></Layout></ProtectedRoute>} />
             <Route path="/pre-exam" element={<ProtectedRoute><Layout><PreExamPage /></Layout></ProtectedRoute>} />
 

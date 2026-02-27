@@ -13,7 +13,7 @@ const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/timetable', label: 'Timetable', icon: Calendar },
   { path: '/study-planner', label: 'Study Planner', icon: BookOpen },
-  { path: '/study-session', label: 'Study Session', icon: PlayCircle },
+  { path: '/work-test', label: 'Work & Test', icon: FileQuestion },
   { path: '/analytics', label: 'Analytics', icon: BarChart3 },
   { path: '/pre-exam', label: 'Pre Exam', icon: FileQuestion },
 ];
@@ -32,7 +32,7 @@ const Header = () => {
             <Zap className="w-5 h-5 text-primary-foreground" />
           </div>
           <span className="font-display font-bold text-lg text-foreground">
-            Smart<span className="gradient-text">Planner</span>
+            Smart-<span className="gradient-text">Study</span>
           </span>
         </Link>
 

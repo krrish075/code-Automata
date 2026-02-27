@@ -15,7 +15,7 @@ const AdminHeader = () => {
                         <Zap className="w-5 h-5 text-primary-foreground" />
                     </div>
                     <span className="font-display font-bold text-lg text-foreground">
-                        Smart<span className="gradient-text">Planner</span> <span className="text-muted-foreground text-sm font-normal ml-1">Admin</span>
+                        Smart-<span className="gradient-text">Study</span> <span className="text-muted-foreground text-sm font-normal ml-1">Admin</span>
                     </span>
                 </Link>
 
