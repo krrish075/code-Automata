@@ -3,6 +3,17 @@ import axios from 'axios';
 
 const API_URL = 'http://localhost:5000/api';
 
+// Sync token with axios headers
+const setAuthToken = (token: string | null) => {
+  if (token) {
+    axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    localStorage.setItem('token', token);
+  } else {
+    delete axios.defaults.headers.common['Authorization'];
+    localStorage.removeItem('token');
+  }
+};
+
 interface Task {
   _id?: string;
   id?: string;
@@ -14,7 +25,22 @@ interface Task {
   completed: boolean;
 }
 
+interface User {
+  id: string;
+  name: string;
+  email?: string;
+  isGuest?: boolean;
+  xp: number;
+  level: number;
+  timetable?: Record<string, any>;
+  isDark?: boolean;
+}
+
 interface AppState {
+  user: User | null;
+  token: string | null;
+  isAuthenticated: boolean;
+
   xp: number;
   level: number;
   streak: number;
@@ -24,17 +50,32 @@ interface AppState {
   totalTasks: number;
   isDark: boolean;
   tasks: Task[];
+  timetable: Record<string, any>;
+
   initialized: boolean;
   init: () => Promise<void>;
+
+  // Auth
+  login: (email: string, pass: string) => Promise<void>;
+  register: (name: string, email: string, pass: string) => Promise<void>;
+  loginGuest: () => Promise<void>;
+  logout: () => void;
+
+  // Actions
   toggleDark: () => void;
   addXP: (amount: number) => void;
   addTask: (task: Omit<Task, '_id' | 'id' | 'completed'>) => void;
   toggleTask: (id: string) => void;
   removeTask: (id: string) => void;
   addStudyTime: (minutes: number) => void;
+  updateTimetable: (grid: Record<string, any>) => Promise<void>;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
+  user: null,
+  token: localStorage.getItem('token'),
+  isAuthenticated: !!localStorage.getItem('token'),
+
   xp: 0,
   level: 1,
   streak: 0,
@@ -44,39 +85,82 @@ export const useAppStore = create<AppState>((set, get) => ({
   totalTasks: 0,
   isDark: false,
   tasks: [],
+  timetable: {},
   initialized: false,
 
   init: async () => {
     if (get().initialized) return;
-    try {
-      const [userRes, tasksRes] = await Promise.all([
-        axios.get(`${API_URL}/users/me`),
-        axios.get(`${API_URL}/tasks`)
-      ]);
-      const user = userRes.data;
-      const tasks = tasksRes.data.map((t: any) => ({ ...t, id: t._id }));
+    const { token } = get();
 
-      set({
-        xp: user.xp,
-        level: user.level,
-        streak: user.streak,
-        totalStudyMinutes: user.totalStudyMinutes,
-        focusHours: user.focusHours,
-        tasksCompleted: user.tasksCompleted,
-        totalTasks: user.totalTasks,
-        isDark: user.isDark,
-        tasks,
-        initialized: true
-      });
+    if (token) {
+      setAuthToken(token);
+      try {
+        const [userRes, tasksRes] = await Promise.all([
+          axios.get(`${API_URL}/users/me`),
+          axios.get(`${API_URL}/tasks`)
+        ]);
+        const user = userRes.data;
+        const tasks = tasksRes.data.map((t: any) => ({ ...t, id: t._id }));
 
-      if (user.isDark) {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
+        set({
+          user: { id: user._id, name: user.name, email: user.email, isGuest: user.isGuest, xp: user.xp, level: user.level },
+          isAuthenticated: true,
+          xp: user.xp,
+          level: user.level,
+          streak: user.streak,
+          totalStudyMinutes: user.totalStudyMinutes,
+          focusHours: user.focusHours,
+          tasksCompleted: user.tasksCompleted,
+          totalTasks: user.totalTasks,
+          isDark: user.isDark,
+          timetable: user.timetable || {},
+          tasks,
+          initialized: true
+        });
+
+        if (user.isDark) {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+      } catch (err) {
+        console.error('Failed to init store', err);
+        setAuthToken(null);
+        set({ isAuthenticated: false, token: null, user: null, initialized: true });
       }
-    } catch (err) {
-      console.error('Failed to init store', err);
+    } else {
+      set({ initialized: true });
     }
+  },
+
+  login: async (email, password) => {
+    const res = await axios.post(`${API_URL}/auth/login`, { email, password });
+    setAuthToken(res.data.token);
+    set({ token: res.data.token, user: res.data.user, isAuthenticated: true, initialized: false });
+    await get().init();
+  },
+
+  register: async (name, email, password) => {
+    const res = await axios.post(`${API_URL}/auth/register`, { name, email, password });
+    setAuthToken(res.data.token);
+    set({ token: res.data.token, user: res.data.user, isAuthenticated: true, initialized: false });
+    await get().init();
+  },
+
+  loginGuest: async () => {
+    const res = await axios.post(`${API_URL}/auth/guest`);
+    setAuthToken(res.data.token);
+    set({ token: res.data.token, user: res.data.user, isAuthenticated: true, initialized: false });
+    await get().init();
+  },
+
+  logout: () => {
+    setAuthToken(null);
+    set({
+      user: null, token: null, isAuthenticated: false,
+      tasks: [], timetable: {}, xp: 0, level: 1, streak: 0,
+      totalStudyMinutes: 0, focusHours: 0, tasksCompleted: 0, totalTasks: 0
+    });
   },
 
   toggleDark: async () => {
@@ -88,10 +172,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       document.documentElement.classList.remove('dark');
     }
     set({ isDark: newDark });
-    try {
-      await axios.put(`${API_URL}/users/me`, { isDark: newDark });
-    } catch (err) {
-      console.error(err);
+    if (state.isAuthenticated) {
+      try { await axios.put(`${API_URL}/users/me`, { isDark: newDark }); } catch (err) { console.error(err); }
     }
   },
 
@@ -100,10 +182,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     const newXP = state.xp + amount;
     const newLevel = Math.floor(newXP / 500) + 1;
     set({ xp: newXP, level: newLevel });
-    try {
-      await axios.put(`${API_URL}/users/me`, { xp: newXP, level: newLevel });
-    } catch (err) {
-      console.error(err);
+    if (state.isAuthenticated) {
+      try { await axios.put(`${API_URL}/users/me`, { xp: newXP, level: newLevel }); } catch (err) { console.error(err); }
     }
   },
 
@@ -112,21 +192,32 @@ export const useAppStore = create<AppState>((set, get) => ({
     const newStudyMinutes = state.totalStudyMinutes + minutes;
     const newFocusHours = state.focusHours + (minutes / 60);
     set({ totalStudyMinutes: newStudyMinutes, focusHours: newFocusHours });
-    try {
-      await axios.put(`${API_URL}/users/me`, { totalStudyMinutes: newStudyMinutes, focusHours: newFocusHours });
-    } catch (err) {
-      console.error(err);
+    if (state.isAuthenticated) {
+      try { await axios.put(`${API_URL}/users/me`, { totalStudyMinutes: newStudyMinutes, focusHours: newFocusHours }); } catch (err) { console.error(err); }
+    }
+  },
+
+  updateTimetable: async (grid) => {
+    set({ timetable: grid });
+    const state = get();
+    if (state.isAuthenticated) {
+      try {
+        await axios.put(`${API_URL}/users/me`, { timetable: grid });
+      } catch (err) {
+        console.error('Failed to save timetable', err);
+      }
     }
   },
 
   addTask: async (task) => {
     try {
+      const state = get();
+      if (!state.isAuthenticated) return;
+
       const res = await axios.post(`${API_URL}/tasks`, task);
       const newTask = { ...res.data, id: res.data._id };
 
-      const state = get();
       const newTotal = state.totalTasks + 1;
-
       set({
         tasks: [...state.tasks, newTask],
         totalTasks: newTotal,
@@ -146,7 +237,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     const wasCompleted = task.completed;
     const newCompleted = !wasCompleted;
 
-    // Optimistic UI update
     const tasksCompletedDelta = wasCompleted ? -1 : 1;
     const xpDelta = wasCompleted ? -50 : 50;
 
@@ -161,11 +251,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       level: newLevel
     });
 
-    try {
-      await axios.put(`${API_URL}/tasks/${id}`, { completed: newCompleted });
-      await axios.put(`${API_URL}/users/me`, { tasksCompleted: newTasksCompleted, xp: newXP, level: newLevel });
-    } catch (err) {
-      console.error(err);
+    if (state.isAuthenticated) {
+      try {
+        await axios.put(`${API_URL}/tasks/${id}`, { completed: newCompleted });
+        await axios.put(`${API_URL}/users/me`, { tasksCompleted: newTasksCompleted, xp: newXP, level: newLevel });
+      } catch (err) {
+        console.error(err);
+      }
     }
   },
 
@@ -183,11 +275,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       tasksCompleted: newCompleted
     });
 
-    try {
-      await axios.delete(`${API_URL}/tasks/${id}`);
-      await axios.put(`${API_URL}/users/me`, { totalTasks: newTotal, tasksCompleted: newCompleted });
-    } catch (err) {
-      console.error(err);
+    if (state.isAuthenticated) {
+      try {
+        await axios.delete(`${API_URL}/tasks/${id}`);
+        await axios.put(`${API_URL}/users/me`, { totalTasks: newTotal, tasksCompleted: newCompleted });
+      } catch (err) {
+        console.error(err);
+      }
     }
   },
 }));

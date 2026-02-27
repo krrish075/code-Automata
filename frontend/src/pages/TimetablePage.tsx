@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowRight, ArrowLeft, Clock, Sunrise, Moon as MoonIcon } from 'lucide-react';
+import { useAppStore } from '@/store/useAppStore';
+import { useToast } from '@/hooks/use-toast';
 
 const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-const timeSlots = ['6:00','7:00','8:00','9:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00','21:00','22:00'];
+const timeSlots = ['6:00', '7:00', '8:00', '9:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00'];
 const slotTypes = ['free', 'study', 'work', 'sleep'] as const;
 const slotColors: Record<string, string> = {
   free: 'bg-muted text-muted-foreground',
@@ -16,10 +18,19 @@ const slotLabels: Record<string, string> = { free: '—', study: '📚', work: '
 type Grid = Record<string, Record<string, typeof slotTypes[number]>>;
 
 const TimetablePage = () => {
+  const { timetable, updateTimetable } = useAppStore();
+  const { toast } = useToast();
   const [step, setStep] = useState(0);
   const [wake, setWake] = useState(7);
   const [bed, setBed] = useState(23);
+  const [isSaving, setIsSaving] = useState(false);
   const [grid, setGrid] = useState<Grid>(() => {
+    // Check if we have an existing timetable in the store
+    if (Object.keys(timetable).length > 0) {
+      return timetable as Grid;
+    }
+
+    // Default generation
     const g: Grid = {};
     days.forEach(d => {
       g[d] = {};
@@ -30,6 +41,13 @@ const TimetablePage = () => {
     });
     return g;
   });
+
+  // If store timetable arrives after mount, resync local state
+  useEffect(() => {
+    if (Object.keys(timetable).length > 0) {
+      setGrid(timetable as Grid);
+    }
+  }, [timetable]);
 
   const sleepHours = wake <= bed ? 24 - bed + wake : wake - bed;
 
@@ -56,11 +74,30 @@ const TimetablePage = () => {
     setGrid(prev => ({ ...prev, [day]: { ...prev[day], [time]: next === 'sleep' ? 'free' : next } }));
   };
 
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      await updateTimetable(grid);
+      toast({
+        title: "Success",
+        description: "Timetable saved to your account!",
+      });
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: "Failed to save timetable.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <div className="container mx-auto px-4 py-8">
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
         <h1 className="font-display text-3xl font-bold text-foreground mb-2">Timetable Generator</h1>
-        <p className="text-muted-foreground mb-8">Create your personalized weekly timetable in 3 easy steps.</p>
+        <p className="text-muted-foreground mb-8">Create your personalized weekly timetable.</p>
       </motion.div>
 
       {/* Progress */}
@@ -78,12 +115,23 @@ const TimetablePage = () => {
             <motion.div
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              onClick={() => setStep(1)}
+              onClick={() => {
+                // If they already have a timetable, skip configuration and jump to editor
+                if (Object.keys(timetable).length > 0) {
+                  setStep(2);
+                } else {
+                  setStep(1);
+                }
+              }}
               className="w-40 h-40 rounded-full gradient-bg flex items-center justify-center cursor-pointer shadow-lg shadow-primary/25 pulse-glow"
             >
               <span className="text-primary-foreground font-display font-bold text-xl">Start</span>
             </motion.div>
-            <p className="text-muted-foreground mt-6">Click to begin creating your timetable</p>
+            <p className="text-muted-foreground mt-6 text-center">
+              {Object.keys(timetable).length > 0
+                ? "Click to edit your existing timetable"
+                : "Click to begin creating your timetable"}
+            </p>
           </motion.div>
         )}
 
@@ -177,10 +225,10 @@ const TimetablePage = () => {
 
             <div className="flex justify-between mt-6">
               <button onClick={() => setStep(1)} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-muted-foreground hover:text-foreground transition-colors">
-                <ArrowLeft className="w-4 h-4" /> Back
+                <ArrowLeft className="w-4 h-4" /> Reconfigure Routine
               </button>
-              <button className="flex items-center gap-2 px-6 py-2.5 rounded-xl gradient-bg text-primary-foreground text-sm font-semibold">
-                Save Timetable ✓
+              <button onClick={handleSave} disabled={isSaving} className="flex items-center gap-2 px-6 py-2.5 rounded-xl gradient-bg text-primary-foreground text-sm font-semibold disabled:opacity-75">
+                {isSaving ? 'Saving...' : 'Save Timetable ✓'}
               </button>
             </div>
           </motion.div>

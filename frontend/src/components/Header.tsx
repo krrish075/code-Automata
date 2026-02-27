@@ -44,9 +44,8 @@ const Header = () => {
               <Link
                 key={path}
                 to={path}
-                className={`relative px-3 py-2 rounded-xl text-sm font-medium transition-colors duration-200 flex items-center gap-1.5 ${
-                  active ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
-                }`}
+                className={`relative px-3 py-2 rounded-xl text-sm font-medium transition-colors duration-200 flex items-center gap-1.5 ${active ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
+                  }`}
               >
                 <Icon className="w-4 h-4" />
                 {label}
@@ -82,13 +81,38 @@ const Header = () => {
             </AnimatePresence>
           </motion.button>
 
-          <button className="hidden md:flex items-center gap-2 px-3 py-2 rounded-xl bg-muted text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-            <div className="w-6 h-6 rounded-full gradient-bg flex items-center justify-center">
-              <User className="w-3.5 h-3.5 text-primary-foreground" />
+          {/* User Profile / Login */}
+          {useAppStore((state) => state.isAuthenticated) ? (
+            <div className="relative group">
+              <button className="hidden md:flex items-center gap-2 px-3 py-2 rounded-xl bg-muted text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+                <div className="w-6 h-6 rounded-full gradient-bg flex items-center justify-center">
+                  <User className="w-3.5 h-3.5 text-primary-foreground" />
+                </div>
+                {useAppStore((state) => state.user?.name) || 'Student'}
+                <ChevronDown className="w-3.5 h-3.5" />
+              </button>
+
+              <div className="absolute right-0 top-full mt-2 w-48 py-2 bg-popover rounded-xl shadow-lg border border-border/50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+                <div className="px-4 py-2 border-b border-border/50 mb-1">
+                  <p className="text-sm font-medium text-foreground">{useAppStore((state) => state.user?.name)}</p>
+                  <p className="text-xs text-muted-foreground truncate">{useAppStore((state) => state.user?.email || 'Guest Account')}</p>
+                </div>
+                <button
+                  onClick={() => useAppStore.getState().logout()}
+                  className="w-full text-left px-4 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors flex items-center gap-2"
+                >
+                  Sign Out
+                </button>
+              </div>
             </div>
-            Student
-            <ChevronDown className="w-3.5 h-3.5" />
-          </button>
+          ) : (
+            <Link
+              to="/auth"
+              className="hidden md:flex items-center gap-2 px-4 py-2 rounded-xl gradient-bg text-sm font-semibold text-primary-foreground shadow-sm hover:shadow-md transition-all"
+            >
+              Sign In
+            </Link>
+          )}
 
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
@@ -116,9 +140,8 @@ const Header = () => {
                     key={path}
                     to={path}
                     onClick={() => setMobileOpen(false)}
-                    className={`px-4 py-3 rounded-xl text-sm font-medium flex items-center gap-2 transition-colors ${
-                      active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted'
-                    }`}
+                    className={`px-4 py-3 rounded-xl text-sm font-medium flex items-center gap-2 transition-colors ${active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted'
+                      }`}
                   >
                     <Icon className="w-4 h-4" />
                     {label}
