@@ -262,27 +262,28 @@ export default function AIVisionDetector({ onWarning, onCheatingMaxReached, onRe
     }
 
     function startAlert(missing: string[]) {
+      const now = performance.now();
+
       if (!alertActive) {
         alertActive = true;
-
-        if (!hasAlertRunning) {
-          const now = performance.now();
-          if (now - lastWarningTime >= WARNING_COOLDOWN_MS) {
-            hasAlertRunning = true;
-            warningCount++;
-            lastWarningTime = now;
-            if (onWarningRef.current) onWarningRef.current(warningCount);
-            if (warningCount >= 3) {
-              if (onCheatingMaxReachedRef.current) onCheatingMaxReachedRef.current();
-            }
-          }
-        }
-
         vwrapRef.current?.classList.add("alert-active");
         playBeep();
         beepInterval = setInterval(playBeep, 900);
         if (logdotRef.current) logdotRef.current.style.background = "#ff1e1e";
       }
+
+      if (!hasAlertRunning) {
+        if (now - lastWarningTime >= WARNING_COOLDOWN_MS) {
+          hasAlertRunning = true;
+          warningCount++;
+          lastWarningTime = now;
+          if (onWarningRef.current) onWarningRef.current(warningCount);
+          if (warningCount >= 3) {
+            if (onCheatingMaxReachedRef.current) onCheatingMaxReachedRef.current();
+          }
+        }
+      }
+
       const label = missing.length ? "⚠ MISSING: " + missing.join(" · ") : "⚠ UPPER BODY INCOMPLETE";
       if (bannerRef.current) bannerRef.current.textContent = label;
       setLog("⚠ " + label, false);
