@@ -8,6 +8,7 @@ const taskRoutes = require('./routes/tasks');
 const userRoutes = require('./routes/users');
 const timetableRoutes = require('./routes/timetable');
 const adminRoutes = require('./routes/admin');
+const testRoutes = require('./routes/testRoutes');
 
 const startCronJobs = require('./cronJobs');
 
@@ -23,6 +24,7 @@ app.use('/api/tasks', taskRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/timetable', timetableRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/tests', testRoutes);
 
 // Connect to MongoDB
 const PORT = process.env.PORT || 5000;

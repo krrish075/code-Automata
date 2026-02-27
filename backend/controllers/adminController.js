@@ -1,5 +1,6 @@
 const User = require('../models/User');
 const StudySession = require('../models/StudySession');
+const TestResult = require('../models/TestResult');
 
 // Admin Login
 exports.adminLogin = async (req, res) => {
@@ -43,6 +44,7 @@ exports.getStudentById = async (req, res) => {
         if (!student) return res.status(404).json({ success: false, message: 'Student not found' });
 
         const sessions = await StudySession.find({ studentId: req.params.id });
+        const testResults = await TestResult.find({ userId: req.params.id }).sort({ createdAt: -1 });
 
         let completedCount = 0;
         let missedCount = 0;
@@ -104,7 +106,8 @@ exports.getStudentById = async (req, res) => {
             weeklyTrendArr,
             focusScoreAverage,
             completedSessionsCount: completedCount,
-            missedSessionsCount: missedCount
+            missedSessionsCount: missedCount,
+            testResults
         });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });

@@ -1,20 +1,25 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { UploadCloud, FileText, CheckCircle, Zap, RefreshCw, Image as ImageIcon } from 'lucide-react';
+import { UploadCloud, FileText, CheckCircle, Zap, RefreshCw, Image as ImageIcon, Clock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import Tesseract from 'tesseract.js';
 import { NLPEngine, MCQQuestion } from '../utils/nlpEngine';
+import { useAppStore } from '@/store/useAppStore';
 
 const WorkTestPage = () => {
     const [workText, setWorkText] = useState('');
     const [isGenerating, setIsGenerating] = useState(false);
     const [isScanning, setIsScanning] = useState(false);
     const [testGenerated, setTestGenerated] = useState(false);
+    const [timeLeft, setTimeLeft] = useState<number | null>(null);
     const [questions, setQuestions] = useState<MCQQuestion[]>([]);
     const [answers, setAnswers] = useState<Record<number, number>>({});
     const [submitted, setSubmitted] = useState(false);
+    const [subjectName, setSubjectName] = useState('');
+    const [testName, setTestName] = useState('');
     const { toast } = useToast();
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const { saveTestResult } = useAppStore();
 
     const handleGenerate = () => {
         if (!workText.trim()) {
@@ -30,6 +35,7 @@ const WorkTestPage = () => {
         setTestGenerated(false);
         setSubmitted(false);
         setAnswers({});
+        setTimeLeft(null);
 
         setTimeout(() => {
             const engine = new NLPEngine(workText);
@@ -48,6 +54,7 @@ const WorkTestPage = () => {
             setQuestions(generated);
             setIsGenerating(false);
             setTestGenerated(true);
+            setTimeLeft(600); // 10 minutes (600 seconds)
             toast({
                 title: "Test Generated",
                 description: "Your AI-powered test is ready based on the provided material!",
@@ -119,8 +126,34 @@ const WorkTestPage = () => {
         return score;
     };
 
-    const handleSubmit = () => {
-        if (Object.keys(answers).length < questions.length) {
+    useEffect(() => {
+        if (!testGenerated || submitted || timeLeft === null) return;
+
+        if (timeLeft <= 0) {
+            toast({
+                title: "Time's up!",
+                description: "Your test has been automatically submitted.",
+            });
+            handleSubmit(true);
+            return;
+        }
+
+        const timerId = setInterval(() => {
+            setTimeLeft((prev) => (prev !== null && prev > 0 ? prev - 1 : 0));
+        }, 1000);
+
+        return () => clearInterval(timerId);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [testGenerated, submitted, timeLeft]);
+
+    const formatTime = (seconds: number) => {
+        const m = Math.floor(seconds / 60);
+        const s = seconds % 60;
+        return `${m}:${s.toString().padStart(2, '0')}`;
+    };
+
+    const handleSubmit = async (autoSubmit = false) => {
+        if (!autoSubmit && Object.keys(answers).length < questions.length) {
             toast({
                 title: "Incomplete Test",
                 description: "Please answer all questions before submitting.",
@@ -129,6 +162,23 @@ const WorkTestPage = () => {
             return;
         }
         setSubmitted(true);
+
+        const testData = {
+            subjectName: subjectName.trim() || 'General',
+            testName: testName.trim() || 'Practice Test',
+            score: calculateScore(),
+            totalQuestions: questions.length,
+            questions: questions.map((q) => ({
+                questionText: q.question,
+                options: q.options,
+                correctIndex: q.correctIndex,
+                userSelectedIndex: answers[q.id] ?? -1,
+                explanation: q.explanation,
+                difficulty: q.difficulty
+            }))
+        };
+
+        await saveTestResult(testData);
     };
 
     return (
@@ -155,13 +205,33 @@ const WorkTestPage = () => {
                             <h2 className="font-display font-semibold text-lg text-foreground">Your Material</h2>
                         </div>
 
-                        <textarea
-                            className="w-full flex-grow min-h-[300px] p-4 rounded-xl bg-muted/50 border border-border text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all mb-4"
-                            placeholder="Paste your text here... (e.g., lecture notes, chapter summaries, code explanations)"
-                            value={workText}
-                            onChange={(e) => setWorkText(e.target.value)}
-                            disabled={isGenerating}
-                        />
+                        <div className="flex flex-col gap-4 mb-4">
+                            <div className="flex gap-4">
+                                <input
+                                    type="text"
+                                    className="w-1/2 p-4 rounded-xl bg-muted/50 border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-medium"
+                                    placeholder="Subject (e.g., Biology)"
+                                    value={subjectName}
+                                    onChange={(e) => setSubjectName(e.target.value)}
+                                    disabled={isGenerating}
+                                />
+                                <input
+                                    type="text"
+                                    className="w-1/2 p-4 rounded-xl bg-muted/50 border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-medium"
+                                    placeholder="Topic (e.g., Cell Division)"
+                                    value={testName}
+                                    onChange={(e) => setTestName(e.target.value)}
+                                    disabled={isGenerating}
+                                />
+                            </div>
+                            <textarea
+                                className="w-full flex-grow min-h-[250px] p-4 rounded-xl bg-muted/50 border border-border text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
+                                placeholder="Paste your text here... (e.g., lecture notes, chapter summaries, code explanations)"
+                                value={workText}
+                                onChange={(e) => setWorkText(e.target.value)}
+                                disabled={isGenerating}
+                            />
+                        </div>
 
                         <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
                             <input
@@ -238,11 +308,19 @@ const WorkTestPage = () => {
                                 <h2 className="font-display font-semibold text-xl text-foreground flex items-center gap-2">
                                     <CheckCircle className="w-5 h-5 text-success" /> Practice Test
                                 </h2>
-                                {submitted && (
-                                    <span className="px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-semibold">
-                                        Score: {calculateScore()} / {questions.length}
-                                    </span>
-                                )}
+                                <div className="flex items-center gap-4">
+                                    {timeLeft !== null && !submitted && (
+                                        <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-semibold border ${timeLeft < 60 ? 'bg-destructive/10 text-destructive border-destructive animate-pulse' : 'bg-muted border-border text-muted-foreground'}`}>
+                                            <Clock className="w-4 h-4" />
+                                            {formatTime(timeLeft)}
+                                        </div>
+                                    )}
+                                    {submitted && (
+                                        <span className="px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-semibold">
+                                            Score: {calculateScore()} / {questions.length}
+                                        </span>
+                                    )}
+                                </div>
                             </div>
 
                             <div className="space-y-6 flex-grow overflow-y-auto pr-2 custom-scrollbar">
@@ -258,8 +336,8 @@ const WorkTestPage = () => {
                                             <div className="flex items-center justify-between mb-3">
                                                 <h3 className="font-medium text-foreground pr-4 break-words">{i + 1}. {q.question}</h3>
                                                 <span className={`text-xs px-2 py-1 rounded-md border flex-shrink-0 ${q.difficulty === 'Hard' ? 'bg-destructive/10 text-destructive border-destructive' :
-                                                        q.difficulty === 'Easy' ? 'bg-success/10 text-success border-success' :
-                                                            'bg-primary/10 text-primary border-primary'
+                                                    q.difficulty === 'Easy' ? 'bg-success/10 text-success border-success' :
+                                                        'bg-primary/10 text-primary border-primary'
                                                     }`}>
                                                     {q.difficulty}
                                                 </span>
@@ -315,7 +393,7 @@ const WorkTestPage = () => {
                             {!submitted && (
                                 <div className="pt-6 mt-4 border-t border-border">
                                     <button
-                                        onClick={handleSubmit}
+                                        onClick={() => handleSubmit(false)}
                                         className="w-full py-3 rounded-xl gradient-bg text-primary-foreground font-semibold shadow-md hover:shadow-lg transition-all"
                                     >
                                         Submit Test

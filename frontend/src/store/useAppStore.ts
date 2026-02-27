@@ -34,6 +34,7 @@ interface User {
   timetable?: Record<string, any>;
   isDark?: boolean;
   role?: string;
+  isGuest?: boolean;
 }
 
 interface AppState {
@@ -72,6 +73,10 @@ interface AppState {
   addStudyTime: (minutes: number) => void;
   logStudySession: (subject: string, durationMinutes: number, focusScore?: number) => Promise<void>;
   updateTimetable: (grid: Record<string, any>) => Promise<void>;
+
+  // Test History
+  saveTestResult: (testData: any) => Promise<void>;
+  fetchTestHistory: () => Promise<any[]>;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -318,4 +323,26 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
     }
   },
+
+  saveTestResult: async (testData: any) => {
+    const state = get();
+    if (!state.isAuthenticated || state.role === 'admin') return;
+    try {
+      await axios.post(`${API_URL}/tests`, testData);
+    } catch (err) {
+      console.error('Failed to save test result', err);
+    }
+  },
+
+  fetchTestHistory: async () => {
+    const state = get();
+    if (!state.isAuthenticated) return [];
+    try {
+      const res = await axios.get(`${API_URL}/tests`);
+      return res.data;
+    } catch (err) {
+      console.error('Failed to fetch test history', err);
+      return [];
+    }
+  }
 }));
