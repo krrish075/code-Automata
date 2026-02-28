@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAppStore } from '@/store/useAppStore';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, BarChart, Bar,
@@ -8,43 +8,89 @@ import {
 import { Clock, CheckCircle2, Flame, Trophy, TrendingUp, ChevronDown, ChevronUp, CheckCircle, XCircle } from 'lucide-react';
 import dayjs from 'dayjs';
 
-const subjectData = [
-  { name: 'Math', hours: 12, color: 'hsl(239, 84%, 67%)' },
-  { name: 'Physics', hours: 9, color: 'hsl(263, 90%, 66%)' },
-  { name: 'CS', hours: 15, color: 'hsl(187, 85%, 53%)' },
-  { name: 'English', hours: 6, color: 'hsl(142, 71%, 45%)' },
-  { name: 'Chemistry', hours: 8, color: 'hsl(43, 96%, 56%)' },
-];
+import axios from 'axios';
 
-const focusData = [
-  { name: 'Focused', value: 78 },
-  { name: 'Distracted', value: 22 },
-];
+const API_URL = 'http://localhost:5000/api';
 const focusColors = ['hsl(239, 84%, 67%)', 'hsl(var(--muted))'];
 
-const trendData = [
-  { week: 'W1', hours: 18 }, { week: 'W2', hours: 22 }, { week: 'W3', hours: 20 },
-  { week: 'W4', hours: 28 }, { week: 'W5', hours: 25 }, { week: 'W6', hours: 32 },
-];
-
-const heatmapData = Array.from({ length: 7 }, (_, d) =>
-  Array.from({ length: 24 }, (_, h) => ({
-    day: d, hour: h, value: Math.random() > 0.5 ? Math.floor(Math.random() * 60) : 0,
-  }))
-).flat();
-
 const AnalyticsPage = () => {
-  const { tasksCompleted, totalTasks, streak, focusHours, totalStudyMinutes, fetchTestHistory } = useAppStore();
+  const { tasksCompleted, totalTasks, streak, focusHours, totalStudyMinutes, fetchTestHistory, token } = useAppStore();
   const [testHistory, setTestHistory] = useState<any[]>([]);
   const [expandedTest, setExpandedTest] = useState<string | null>(null);
+  const [sessions, setSessions] = useState<any[]>([]);
 
   useEffect(() => {
     const loadTests = async () => {
       const history = await fetchTestHistory();
       setTestHistory(history);
     };
-    loadTests();
-  }, [fetchTestHistory]);
+    if (token) {
+      loadTests();
+      axios.get(`${API_URL}/users/study-session`)
+        .then(res => setSessions(res.data))
+        .catch(err => console.error("Failed to fetch study sessions", err));
+    }
+  }, [fetchTestHistory, token]);
+
+  // Transform actual data into chart props
+  const { trendData, subjectData, focusData, focusPercent } = useMemo(() => {
+    // 1. Trend Data (last 6 weeks)
+    const weeksMap = new Map<number, number>();
+    sessions.forEach(s => {
+      const d = new Date(s.date);
+      // Rough calc for relative week number based on today
+      const msDiff = Date.now() - d.getTime();
+      const weeksAgo = Math.floor(msDiff / (1000 * 60 * 60 * 24 * 7));
+      if (weeksAgo <= 5) {
+        weeksMap.set(weeksAgo, (weeksMap.get(weeksAgo) || 0) + s.duration);
+      }
+    });
+
+    const trend = [];
+    for (let i = 5; i >= 0; i--) {
+      trend.push({
+        week: i === 0 ? 'This Wk' : `Wk -${i}`,
+        hours: Math.round(((weeksMap.get(i) || 0) / 60) * 10) / 10
+      });
+    }
+
+    // 2. Subject Distribution
+    const subjs: Record<string, number> = {};
+    sessions.forEach(s => {
+      const name = s.subject || 'General Focus';
+      subjs[name] = (subjs[name] || 0) + s.duration;
+    });
+
+    const palette = ['hsl(239, 84%, 67%)', 'hsl(263, 90%, 66%)', 'hsl(187, 85%, 53%)', 'hsl(142, 71%, 45%)', 'hsl(43, 96%, 56%)'];
+    const subjects = Object.entries(subjs)
+      .sort((a, b) => b[1] - a[1]) // Sort highest hours first
+      .map(([name, mins], idx) => ({
+        name,
+        hours: Math.round((mins / 60) * 10) / 10,
+        color: palette[idx % palette.length]
+      }));
+
+    // 3. Focus / Distracted slice averaging
+    let totalFocusScore = 0;
+    let validSessions = 0;
+    sessions.forEach(s => {
+      if (s.focusScore !== undefined) {
+        totalFocusScore += s.focusScore;
+        validSessions++;
+      }
+    });
+
+    // Default 100% focus if no logged focus metrics
+    const avgFocused = validSessions > 0 ? Math.round(totalFocusScore / validSessions) : 100;
+    const distracted = 100 - avgFocused;
+
+    const focusArr = [
+      { name: 'Focused', value: avgFocused },
+      { name: 'Distracted', value: distracted },
+    ];
+
+    return { trendData: trend, subjectData: subjects, focusData: focusArr, focusPercent: avgFocused };
+  }, [sessions]);
 
   const stats = [
     { icon: Clock, label: 'Total Study', value: `${Math.floor(totalStudyMinutes / 60)}h ${totalStudyMinutes % 60}m`, color: 'text-primary' },
@@ -110,8 +156,8 @@ const AnalyticsPage = () => {
             </ResponsiveContainer>
           </div>
           <div className="flex justify-center gap-6 mt-2">
-            <span className="flex items-center gap-2 text-xs text-muted-foreground"><span className="w-3 h-3 rounded-full bg-primary" /> Focused 78%</span>
-            <span className="flex items-center gap-2 text-xs text-muted-foreground"><span className="w-3 h-3 rounded-full bg-muted" /> Distracted 22%</span>
+            <span className="flex items-center gap-2 text-xs text-muted-foreground"><span className="w-3 h-3 rounded-full bg-primary" /> Focused {focusPercent}%</span>
+            <span className="flex items-center gap-2 text-xs text-muted-foreground"><span className="w-3 h-3 rounded-full bg-muted" /> Distracted {100 - focusPercent}%</span>
           </div>
         </motion.div>
 

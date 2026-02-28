@@ -3,14 +3,12 @@ import { useAppStore } from '@/store/useAppStore';
 import {
   Clock, Flame, Zap, Target, TrendingUp, BookOpen, Trophy, Quote
 } from 'lucide-react';
+import { useMemo } from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { useEffect, useState } from 'react';
+import axios from 'axios';
 
-const weeklyData = [
-  { day: 'Mon', hours: 3.5 }, { day: 'Tue', hours: 4.2 }, { day: 'Wed', hours: 2.8 },
-  { day: 'Thu', hours: 5.1 }, { day: 'Fri', hours: 3.9 }, { day: 'Sat', hours: 6.0 },
-  { day: 'Sun', hours: 4.5 },
-];
-
+const API_URL = 'http://localhost:5000/api';
 const quotes = [
   "The secret of getting ahead is getting started. — Mark Twain",
   "Education is the passport to the future. — Malcolm X",
@@ -18,7 +16,85 @@ const quotes = [
 ];
 
 const DashboardPage = () => {
-  const { xp, level, streak, totalStudyMinutes, focusHours, tasksCompleted, totalTasks } = useAppStore();
+  const { xp, level, streak, totalStudyMinutes, focusHours, tasksCompleted, totalTasks, timetable, token } = useAppStore();
+  const [sessions, setSessions] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!token) return;
+    axios.get(`${API_URL}/users/study-session`)
+      .then(res => setSessions(res.data))
+      .catch(err => console.error("Failed to fetch study sessions", err));
+  }, [token]);
+
+  const weeklyData = useMemo(() => {
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const data = days.map(d => ({ day: d, expected: 0, actual: 0 }));
+
+    if (timetable && typeof timetable === 'object') {
+      days.forEach((day, index) => {
+        const daySchedule = timetable[day];
+        if (Array.isArray(daySchedule)) {
+          let totalMinutes = 0;
+          daySchedule.forEach((block: any) => {
+            if (block.time) {
+              // Parse "HH:MM - HH:MM"
+              const times = block.time.split('-');
+              if (times.length === 2) {
+                const start = times[0].trim();
+                const end = times[1].trim();
+
+                const parseTime = (timeStr: string) => {
+                  const parts = timeStr.match(/(\d+):(\d+)\s*(AM|PM)?/i);
+                  if (!parts) return 0;
+                  let hours = parseInt(parts[1], 10);
+                  const minutes = parseInt(parts[2], 10);
+                  const ampm = parts[3] ? parts[3].toUpperCase() : '';
+
+                  if (ampm === 'PM' && hours < 12) hours += 12;
+                  if (ampm === 'AM' && hours === 12) hours = 0;
+
+                  return hours * 60 + minutes;
+                };
+
+                const startMins = parseTime(start);
+                const endMins = parseTime(end);
+
+                if (endMins > startMins) {
+                  totalMinutes += (endMins - startMins);
+                } else if (endMins < startMins) {
+                  // cross midnight case
+                  totalMinutes += ((24 * 60) - startMins + endMins);
+                }
+              }
+            }
+          });
+          data[index].expected = Math.round((totalMinutes / 60) * 10) / 10;
+        }
+      });
+    }
+
+    // 2) Calculate ACTUAL hours from completed completed sessions
+    const now = new Date();
+    const dayOfWeek = now.getDay() || 7; // make Sunday 7 instead of 0
+    const startOfWeek = new Date(now);
+    startOfWeek.setHours(0, 0, 0, 0);
+    startOfWeek.setDate(now.getDate() - dayOfWeek + 1); // Go back to Monday
+
+    sessions.forEach(session => {
+      const sessionDate = new Date(session.date);
+      if (sessionDate >= startOfWeek) {
+        let dayIdx = sessionDate.getDay() - 1;
+        if (dayIdx === -1) dayIdx = 6; // Sunday
+        data[dayIdx].actual += session.duration;
+      }
+    });
+
+    // Rounding
+    data.forEach(d => { d.actual = Math.round(d.actual * 10) / 10; });
+
+    return data;
+  }, [timetable, sessions]);
+
   const xpInLevel = xp % 500;
   const xpNeeded = 500;
   const productivityScore = totalTasks > 0 ? Math.round((tasksCompleted / totalTasks) * 100) : 0;
@@ -92,27 +168,34 @@ const DashboardPage = () => {
           className="lg:col-span-2 glass-card p-6"
         >
           <h3 className="font-display font-semibold text-foreground mb-4">Weekly Study Hours</h3>
-          <ResponsiveContainer width="100%" height={220}>
-            <AreaChart data={weeklyData}>
-              <defs>
-                <linearGradient id="colorHours" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="hsl(239, 84%, 67%)" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="hsl(239, 84%, 67%)" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <XAxis dataKey="day" tickLine={false} axisLine={false} className="text-xs" />
-              <YAxis tickLine={false} axisLine={false} className="text-xs" />
-              <Tooltip
-                contentStyle={{
-                  background: 'hsl(var(--card))',
-                  border: '1px solid hsl(var(--border))',
-                  borderRadius: '12px',
-                  boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
-                }}
-              />
-              <Area type="monotone" dataKey="hours" stroke="hsl(239, 84%, 67%)" fill="url(#colorHours)" strokeWidth={2} />
-            </AreaChart>
-          </ResponsiveContainer>
+          <div style={{ width: '100%', height: '220px' }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={weeklyData}>
+                <defs>
+                  <linearGradient id="colorExpected" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="hsl(239, 84%, 67%)" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="hsl(239, 84%, 67%)" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="colorActual" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="hsl(142, 71%, 45%)" stopOpacity={0.4} />
+                    <stop offset="95%" stopColor="hsl(142, 71%, 45%)" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="day" tickLine={false} axisLine={false} className="text-xs" />
+                <YAxis tickLine={false} axisLine={false} className="text-xs" />
+                <Tooltip
+                  contentStyle={{
+                    background: 'hsl(var(--card))',
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: '12px',
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
+                  }}
+                />
+                <Area type="monotone" dataKey="expected" name="Planned" stroke="hsl(239, 84%, 67%)" fill="url(#colorExpected)" strokeWidth={2} />
+                <Area type="monotone" dataKey="actual" name="Completed" stroke="hsl(142, 71%, 45%)" fill="url(#colorActual)" strokeWidth={3} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
         </motion.div>
 
         {/* Right column */}

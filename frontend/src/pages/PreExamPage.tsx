@@ -1,19 +1,32 @@
 import { motion } from 'framer-motion';
 import { AlertTriangle, BookOpen, TrendingUp, CheckCircle2, Brain } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
-import { useMemo } from 'react';
+import { useMemo, useEffect, useState } from 'react';
+import axios from 'axios';
 
+const API_URL = 'http://localhost:5000/api';
 const urgencyColors = { high: 'border-destructive/30 bg-destructive/5', mid: 'border-warning/30 bg-warning/5', low: 'border-success/30 bg-success/5' };
 
 const PreExamPage = () => {
-  const tasks = useAppStore(state => state.tasks);
+  const { tasks, fetchTestHistory, token } = useAppStore();
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [testHistory, setTestHistory] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (token) {
+      axios.get(`${API_URL}/users/study-session`)
+        .then(res => setSessions(res.data))
+        .catch(console.error);
+
+      fetchTestHistory().then(setTestHistory).catch(console.error);
+    }
+  }, [token, fetchTestHistory]);
 
   const { weakSubjects, predictions, revisionItems } = useMemo(() => {
-    // 1. Group tasks by subject
-    const subjectStats: Record<string, { total: number, completed: number, etaSum: number }> = {};
+    const subjectStats: Record<string, { total: number; completed: number; etaSum: number }> = {};
 
+    // 1️⃣ Group tasks
     tasks.forEach(t => {
-      // Treat subjects case insensitively
       const subject = t.subject.trim();
       if (!subjectStats[subject]) {
         subjectStats[subject] = { total: 0, completed: 0, etaSum: 0 };
@@ -23,66 +36,129 @@ const PreExamPage = () => {
       subjectStats[subject].etaSum += t.eta;
     });
 
-    const preds = [];
-    const weaks = [];
+    // 2️⃣ Study Sessions (minutes → hours)
+    const actualStudyStats: Record<string, number> = {};
+    sessions.forEach(s => {
+      const subj = (s.subject || 'General').trim();
+      actualStudyStats[subj] = (actualStudyStats[subj] || 0) + s.duration;
+    });
 
-    for (const [subject, stats] of Object.entries(subjectStats)) {
-      const completion = stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0;
-      const studyHours = Math.round(stats.etaSum / 60);
+    // 3️⃣ Test History (marks out of 10 → percentage)
+    const actualTestStats: Record<string, { totalScore: number; count: number }> = {};
+    testHistory.forEach(t => {
+      const subj = (t.subjectName || 'General').trim();
+      if (!actualTestStats[subj]) {
+        actualTestStats[subj] = { totalScore: 0, count: 0 };
+      }
 
-      // Calculate a predicted score based on completion and study hours
-      // Base score 40, max 100.
-      let predicted = 40 + (completion * 0.4) + (studyHours * 0.5);
-      predicted = Math.min(100, Math.round(predicted));
+      const percent = (t.score / 10) * 100; // marks out of 10
+      actualTestStats[subj].totalScore += percent;
+      actualTestStats[subj].count++;
+    });
 
-      preds.push({ subject, studyHours, completion, predicted });
+    const preds: any[] = [];
+    const weaks: any[] = [];
 
-      // Check if it's a weak subject
-      if (predicted < 75 || completion < 50) {
-        const isHighUrgency = predicted < 60 || completion < 30;
+    const allSubjects = new Set([
+      ...Object.keys(subjectStats),
+      ...Object.keys(actualStudyStats),
+      ...Object.keys(actualTestStats),
+    ]);
+
+    // 🔥 Find max study hours (for normalization)
+    const maxStudyHours = Math.max(
+      ...Array.from(allSubjects).map(sub => {
+        const mins = actualStudyStats[sub] || 0;
+        const eta = subjectStats[sub]?.etaSum || 0;
+        return Math.round((mins > 0 ? mins : eta) / 60);
+      }),
+      1
+    );
+
+    for (const subject of Array.from(allSubjects)) {
+      const stats = subjectStats[subject] || { total: 0, completed: 0, etaSum: 0 };
+      const completion =
+        stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0;
+
+      const actualMinutes = actualStudyStats[subject] || 0;
+      const studyHours = Math.round((actualMinutes > 0 ? actualMinutes : stats.etaSum) / 60);
+
+      const normalizedStudy = Math.round((studyHours / maxStudyHours) * 100);
+
+      const tStat = actualTestStats[subject];
+      const avgTestScore = tStat
+        ? Math.round(tStat.totalScore / tStat.count)
+        : null;
+
+      let predicted;
+
+      if (avgTestScore !== null) {
+        // 🔥 Strong weighted formula
+        predicted =
+          normalizedStudy * 0.3 +
+          completion * 0.2 +
+          avgTestScore * 0.5;
+
+        // 🔥 Extra penalty / bonus
+        if (avgTestScore < 40) {
+          predicted -= 10; // heavy penalty
+        } else if (avgTestScore > 85) {
+          predicted += 5; // excellence boost
+        }
+      } else {
+        // No tests taken
+        predicted = normalizedStudy * 0.6 + completion * 0.4;
+      }
+
+      predicted = Math.max(30, Math.min(100, Math.round(predicted)));
+
+      let level = "Weak";
+      if (predicted >= 85) level = "Excellent";
+      else if (predicted >= 70) level = "Good";
+      else if (predicted >= 55) level = "Average";
+
+      preds.push({
+        subject,
+        studyHours,
+        completion,
+        avgTestScore,
+        predicted,
+        level,
+      });
+
+      // Weak detection
+      if (predicted < 70) {
         weaks.push({
           subject,
-          reason: completion < 50 ? `${stats.total - stats.completed} incomplete tasks` : `Low study time (${studyHours}h)`,
-          suggestion: `Focus on completing remaining ${subject} tasks`,
-          urgency: isHighUrgency ? 'high' as const : 'mid' as const
+          reason:
+            avgTestScore !== null && avgTestScore < 50
+              ? `Low test performance (${avgTestScore}%)`
+              : `Low study time (${studyHours}h)`,
+          suggestion: `Increase practice and revision for ${subject}`,
+          urgency: predicted < 50 ? "high" : "mid",
         });
       }
     }
 
-    // Sort predictions by predicted score (descending)
     preds.sort((a, b) => b.predicted - a.predicted);
-    weaks.sort((a, b) => a.urgency === 'high' ? -1 : 1);
+    weaks.sort((a, b) => (a.urgency === "high" ? -1 : 1));
 
-    // Revision items: tasks that are not completed
+    // Revision items
     const revItems = tasks
       .filter(t => !t.completed)
       .sort((a, b) => {
-        // High priority first
-        const pMap = { high: 3, mid: 2, low: 1 };
-        return pMap[b.priority] - pMap[a.priority];
+        const pMap: Record<string, number> = { high: 3, mid: 2, low: 1 };
+        return (pMap[b.priority] || 0) - (pMap[a.priority] || 0);
       })
+      .slice(0, 5)
       .map(t => ({
         subject: `${t.subject} - ${t.topic}`,
         priority: t.priority,
-        done: t.completed
-      }))
-      .slice(0, 5); // top 5
-
-    // Include some completed ones if we have < 5 to keep the UI looking full
-    if (revItems.length < 5) {
-      const completedItems = tasks
-        .filter(t => t.completed)
-        .slice(0, 5 - revItems.length)
-        .map(t => ({
-          subject: `${t.subject} - ${t.topic}`,
-          priority: t.priority,
-          done: t.completed
-        }));
-      revItems.push(...completedItems);
-    }
+        done: t.completed,
+      }));
 
     return { weakSubjects: weaks, predictions: preds, revisionItems: revItems };
-  }, [tasks]);
+  }, [tasks, sessions, testHistory]);
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -133,15 +209,16 @@ const PreExamPage = () => {
                 <thead>
                   <tr className="border-b border-border">
                     <th className="text-left p-4 text-xs font-medium text-muted-foreground">Subject</th>
-                    <th className="text-center p-4 text-xs font-medium text-muted-foreground">Study Hours</th>
-                    <th className="text-center p-4 text-xs font-medium text-muted-foreground">Completion %</th>
-                    <th className="text-center p-4 text-xs font-medium text-muted-foreground">Predicted Score</th>
+                    <th className="text-center p-4 text-xs font-medium text-muted-foreground">Actual Study Time</th>
+                    <th className="text-center p-4 text-xs font-medium text-muted-foreground">Task Completion</th>
+                    <th className="text-center p-4 text-xs font-medium text-muted-foreground text-primary">Avg Test Score</th>
+                    <th className="text-center p-4 text-xs font-medium justify-center text-muted-foreground flex items-center gap-1"><Brain className="w-4 h-4" /> Predicted Score</th>
                   </tr>
                 </thead>
                 <tbody>
                   {predictions.map((p, i) => (
                     <motion.tr key={p.subject} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 + i * 0.05 }}
-                      className="border-b border-border/50 last:border-0">
+                      className="border-b border-border/50 last:border-0 hover:bg-muted/10 transition-colors">
                       <td className="p-4 text-sm font-medium text-foreground">{p.subject}</td>
                       <td className="p-4 text-sm text-center text-muted-foreground">{p.studyHours}h</td>
                       <td className="p-4 text-center">
@@ -151,6 +228,9 @@ const PreExamPage = () => {
                           </div>
                           <span className="text-xs text-muted-foreground">{p.completion}%</span>
                         </div>
+                      </td>
+                      <td className="p-4 text-center font-semibold text-foreground">
+                        {p.avgTestScore !== null ? `${p.avgTestScore}%` : <span className="text-xs text-muted-foreground font-normal">No Tests Taken</span>}
                       </td>
                       <td className="p-4 text-center">
                         <span className={`font-display font-bold text-lg ${p.predicted >= 80 ? 'text-success' : p.predicted >= 70 ? 'text-warning' : 'text-destructive'}`}>

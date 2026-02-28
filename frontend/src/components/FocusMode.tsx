@@ -109,10 +109,10 @@ const FocusMode: React.FC<FocusModeProps> = ({ isActive }) => {
                     if (!hasFace) setHasFace(true);
                     consecutiveMisses.current = 0;
                 } else {
-                    // No face found
+                    // Nout found
                     consecutiveMisses.current += 1;
-                    // If out of frame for ~5 scans (~5-10 seconds), trigger alert
-                    if (consecutiveMisses.current > 5) {
+                    // If out of frame for ~3 scans (~3 seconds), trigger alert
+                    if (consecutiveMisses.current > 2) {
                         setHasFace(false);
                     }
                 }

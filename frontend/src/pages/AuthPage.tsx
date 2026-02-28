@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAppStore } from '@/store/useAppStore';
 import { useNavigate } from 'react-router-dom';
@@ -13,9 +13,15 @@ const AuthPage = () => {
     const [isAdminLogin, setIsAdminLogin] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
 
-    const { login, register, loginGuest, loginAdmin, role } = useAppStore();
+    const { login, register, loginGuest, loginAdmin, role, isAuthenticated } = useAppStore();
     const navigate = useNavigate();
     const { toast } = useToast();
+
+    useEffect(() => {
+        if (isAuthenticated) {
+            navigate(role === 'admin' ? '/admin' : '/', { replace: true });
+        }
+    }, [isAuthenticated, role, navigate]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -26,10 +32,10 @@ const AuthPage = () => {
                 navigate('/admin');
             } else if (isLogin) {
                 await login(email, password);
-                navigate('/dashboard');
+                navigate('/');
             } else {
                 await register(name, email, password);
-                navigate('/dashboard');
+                navigate('/');
             }
         } catch (err: any) {
             toast({
@@ -46,7 +52,7 @@ const AuthPage = () => {
         setIsLoading(true);
         try {
             await loginGuest();
-            navigate('/dashboard');
+            navigate('/');
         } catch (err) {
             toast({
                 title: "Error",

@@ -60,4 +60,14 @@ router.post('/study-session', auth, async (req, res) => {
     }
 });
 
+// Get Study Sessions
+router.get('/study-session', auth, async (req, res) => {
+    try {
+        const sessions = await StudySession.find({ studentId: req.user.id }).sort({ date: -1 });
+        res.json(sessions);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
 module.exports = router;

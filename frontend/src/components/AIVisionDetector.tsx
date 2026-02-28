@@ -188,6 +188,7 @@ export default function AIVisionDetector({ onWarning, onCheatingMaxReached, onRe
     styleEl.textContent = CSS;
     document.head.appendChild(styleEl);
 
+    let isMounted = true;
     let rafId: number;
     let beepInterval: ReturnType<typeof setInterval> | null = null;
     let alertActive = false;
@@ -461,13 +462,23 @@ export default function AIVisionDetector({ onWarning, onCheatingMaxReached, onRe
           video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" },
           audio: false,
         });
+        if (!isMounted) {
+          stream.getTracks().forEach(t => t.stop());
+          return;
+        }
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
-          await new Promise<void>(r => { if (videoRef.current) videoRef.current.onloadedmetadata = () => r(); });
-          await videoRef.current.play();
+          await new Promise<void>(r => {
+            if (!videoRef.current || videoRef.current.readyState >= 1) {
+              r();
+            } else {
+              videoRef.current.onloadedmetadata = () => r();
+            }
+          });
+          await videoRef.current.play().catch(e => console.warn("Play interrupted", e));
         }
       } catch (e: any) {
-        showErr("Camera access denied or unavailable.n" + e.message); return;
+        showErr("Camera access denied or unavailable.\n" + e.message); return;
       }
 
       setP(8, "Loading WASM runtime…");
@@ -496,8 +507,12 @@ export default function AIVisionDetector({ onWarning, onCheatingMaxReached, onRe
         poseLandmarker = pl;
       } catch (e) { console.warn("Models failed:", e); }
 
+      if (!isMounted) return;
+
       setP(100, "All models ready!");
       await new Promise(r => setTimeout(r, 280));
+      if (!isMounted) return;
+
       if (loadOvRef.current) loadOvRef.current.style.display = "none";
       setLog("Detection active…", true);
       if (onReadyRef.current) onReadyRef.current();
@@ -565,6 +580,7 @@ export default function AIVisionDetector({ onWarning, onCheatingMaxReached, onRe
     document.addEventListener("click", unlockAudio, { once: true });
 
     return () => {
+      isMounted = false;
       cancelAnimationFrame(rafId);
       if (videoRef.current && videoRef.current.srcObject) {
         const tracks = (videoRef.current.srcObject as MediaStream).getTracks();

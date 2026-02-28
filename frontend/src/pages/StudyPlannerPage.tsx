@@ -31,6 +31,8 @@ const StudyPlannerPage = () => {
   const [isRunning, setIsRunning] = useState(false);
   const [isWork, setIsWork] = useState(true);
   const [totalFocus, setTotalFocus] = useState(0);
+  const [currentSessionTask, setCurrentSessionTask] = useState<string | null>(null);
+  const [currentSessionTaskId, setCurrentSessionTaskId] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval>>();
 
   // Timer Logic
@@ -48,10 +50,16 @@ const StudyPlannerPage = () => {
               if (m === 0) {
                 setIsRunning(false);
                 setIsWork(w => !w);
-                if (isWork && preset.work) {
-                  addStudyTime(preset.work);
+                if (isWork) {
+                  const minutesToAdd = currentSessionTask ? minutes : preset.work || 25;
+                  addStudyTime(minutesToAdd, currentSessionTask || undefined);
+                  if (currentSessionTaskId) {
+                    toggleTask(currentSessionTaskId);
+                    setCurrentSessionTaskId(null); // only auto-check once
+                    setActiveTab('planner'); // redirect to planner section
+                  }
                 }
-                return isWork ? (preset.rest || 5) : (preset.work || 25);
+                return isWork ? (preset.rest || 5) : (currentSessionTask ? minutes : (preset.work || 25));
               }
               return m - 1;
             });
@@ -63,7 +71,7 @@ const StudyPlannerPage = () => {
       }, 1000);
     }
     return () => clearInterval(intervalRef.current);
-  }, [isRunning, isWork, preset, minutes, addStudyTime]);
+  }, [isRunning, isWork, preset, minutes, addStudyTime, currentSessionTask, currentSessionTaskId, toggleTask]);
 
   const selectPreset = (i: number) => {
     setSelectedPreset(i);
@@ -80,6 +88,19 @@ const StudyPlannerPage = () => {
     setSeconds(0);
     setIsRunning(false);
     setIsWork(true);
+    setCurrentSessionTask(null);
+    setCurrentSessionTaskId(null);
+  };
+
+  const handleStartTask = (task: any) => {
+    setActiveTab('session');
+    setMinutes(task.eta);
+    setSeconds(0);
+    setCurrentSessionTask(task.subject);
+    setCurrentSessionTaskId(task.id);
+    setIsWork(true);
+    setSelectedPreset(2); // Set to "Custom" visually
+    setIsRunning(true);
   };
 
   const formatTime = (m: number, s: number) =>
@@ -195,9 +216,14 @@ const StudyPlannerPage = () => {
                     </span>
                   </div>
 
-                  <button onClick={() => removeTask(task.id)} className="flex-shrink-0 text-muted-foreground hover:text-destructive transition-colors">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => handleStartTask(task)} className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center hover:bg-primary/20 transition-colors" title="Start Task Timer">
+                      <Play className="w-4 h-4 ml-0.5" />
+                    </button>
+                    <button onClick={() => removeTask(task.id)} className="flex-shrink-0 text-muted-foreground hover:text-destructive transition-colors" title="Delete Task">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </motion.div>
               ))}
             </AnimatePresence>
@@ -247,7 +273,9 @@ const StudyPlannerPage = () => {
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
                 <span className="font-display text-4xl font-bold text-foreground">{formatTime(minutes, seconds)}</span>
-                <span className="text-xs text-muted-foreground mt-1">{isWork ? 'Focus Time' : 'Break Time'}</span>
+                <span className="text-xs text-muted-foreground mt-1">
+                  {currentSessionTask ? currentSessionTask : (isWork ? 'Focus Time' : 'Break Time')}
+                </span>
               </div>
             </div>
 

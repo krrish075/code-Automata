@@ -4,7 +4,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { Sun, Moon, LogOut, Zap } from 'lucide-react';
 
 const AdminHeader = () => {
-    const { isDark, toggleDark, logout } = useAppStore();
+    const { isDark, toggleDark, logout, user } = useAppStore();
 
     return (
         <header className="fixed top-0 left-0 right-0 z-50 glass-card border-b border-border/50 rounded-none">
@@ -21,6 +21,11 @@ const AdminHeader = () => {
 
                 {/* Right Controls */}
                 <div className="flex items-center gap-4">
+                    {user && (
+                        <div className="hidden sm:flex items-center gap-2 px-2 border-r border-border/50 mr-1 pr-4">
+                            <span className="text-sm font-semibold text-foreground">{user.name}</span>
+                        </div>
+                    )}
                     <motion.button
                         whileTap={{ scale: 0.9 }}
                         onClick={toggleDark}

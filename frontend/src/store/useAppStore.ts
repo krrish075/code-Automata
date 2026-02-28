@@ -55,7 +55,7 @@ interface AppState {
   timetable: Record<string, any>;
 
   initialized: boolean;
-  init: () => Promise<void>;
+  init: (force?: boolean) => Promise<void>;
 
   // Auth
   login: (email: string, pass: string) => Promise<void>;
@@ -70,7 +70,7 @@ interface AppState {
   addTask: (task: Omit<Task, '_id' | 'id' | 'completed'>) => void;
   toggleTask: (id: string) => void;
   removeTask: (id: string) => void;
-  addStudyTime: (minutes: number) => void;
+  addStudyTime: (minutes: number, subjectName?: string) => void;
   logStudySession: (subject: string, durationMinutes: number, focusScore?: number) => Promise<void>;
   updateTimetable: (grid: Record<string, any>) => Promise<void>;
 
@@ -92,13 +92,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   focusHours: 0,
   tasksCompleted: 0,
   totalTasks: 0,
-  isDark: false,
+  isDark: true,
   tasks: [],
   timetable: {},
   initialized: false,
 
-  init: async () => {
-    if (get().initialized) return;
+  init: async (force = false) => {
+    if (get().initialized && !force) return;
     const { token } = get();
 
     if (token) {
@@ -138,6 +138,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         set({ isAuthenticated: false, token: null, user: null, initialized: true });
       }
     } else {
+      document.documentElement.classList.add('dark');
       set({ initialized: true });
     }
   },
@@ -146,24 +147,24 @@ export const useAppStore = create<AppState>((set, get) => ({
     const res = await axios.post(`${API_URL}/auth/login`, { email, password });
     setAuthToken(res.data.token);
     localStorage.setItem('role', res.data.role);
-    set({ token: res.data.token, user: res.data.user, isAuthenticated: true, role: res.data.role, initialized: false });
-    await get().init();
+    set({ token: res.data.token, user: res.data.user, isAuthenticated: true, role: res.data.role });
+    await get().init(true);
   },
 
   register: async (name, email, password) => {
     const res = await axios.post(`${API_URL}/auth/register`, { name, email, password });
     setAuthToken(res.data.token);
     localStorage.setItem('role', res.data.role);
-    set({ token: res.data.token, user: res.data.user, isAuthenticated: true, role: res.data.role, initialized: false });
-    await get().init();
+    set({ token: res.data.token, user: res.data.user, isAuthenticated: true, role: res.data.role });
+    await get().init(true);
   },
 
   loginGuest: async () => {
     const res = await axios.post(`${API_URL}/auth/guest`);
     setAuthToken(res.data.token);
     localStorage.setItem('role', res.data.role);
-    set({ token: res.data.token, user: res.data.user, isAuthenticated: true, role: res.data.role, initialized: false });
-    await get().init();
+    set({ token: res.data.token, user: res.data.user, isAuthenticated: true, role: res.data.role });
+    await get().init(true);
   },
 
   loginAdmin: async (username, password) => {
@@ -213,13 +214,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  addStudyTime: async (minutes) => {
+  addStudyTime: async (minutes, subjectName?: string) => {
     const state = get();
     const newStudyMinutes = state.totalStudyMinutes + minutes;
     const newFocusHours = state.focusHours + (minutes / 60);
     set({ totalStudyMinutes: newStudyMinutes, focusHours: newFocusHours });
     if (state.isAuthenticated && state.role !== 'admin') {
-      try { await axios.put(`${API_URL}/users/me`, { totalStudyMinutes: newStudyMinutes, focusHours: newFocusHours }); } catch (err) { console.error(err); }
+      try {
+        await axios.put(`${API_URL}/users/me`, { totalStudyMinutes: newStudyMinutes, focusHours: newFocusHours });
+        // Also log this as a completed study session so it appears on the dashboard graphs
+        get().logStudySession(subjectName || 'Focus Timer Goal', minutes, 100);
+      } catch (err) { console.error(err); }
     }
   },
 
