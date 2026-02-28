@@ -22,7 +22,6 @@ interface SmartSubject {
   subject: string;
   deadline: string;
   difficulty: number;
-  requiredHours: number;
   remainingHours: number;
   preferredTime: string;
   maxDailyHours: number;
@@ -66,7 +65,7 @@ const TimetablePage = () => {
   const [smartTimetable, setSmartTimetable] = useState<SmartSlot[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [form, setForm] = useState({
-    subject: '', deadline: '', difficulty: 3, requiredHours: 10, preferredTime: 'Morning', maxDailyHours: 3
+    subject: '', deadline: '', difficulty: 3, preferredTime: 'Morning', maxDailyHours: 3
   });
 
   // Fetch smart data
@@ -95,7 +94,7 @@ const TimetablePage = () => {
     try {
       await axios.post(`${API_URL}/timetable/subjects`, form, { headers: { Authorization: `Bearer ${token}` } });
       toast({ title: 'Success', description: 'Subject added.' });
-      setForm({ ...form, subject: '', requiredHours: 10 });
+      setForm({ ...form, subject: '' });
       fetchSmartData();
     } catch (err: any) {
       toast({ title: 'Error', description: err.message, variant: 'destructive' });
@@ -179,14 +178,10 @@ const TimetablePage = () => {
                   <label className="text-xs font-medium text-muted-foreground mb-1 block">Deadline</label>
                   <input required type="date" value={form.deadline} onChange={e => setForm({ ...form, deadline: e.target.value })} className="w-full bg-background border rounded-lg px-3 py-2 text-sm focus:border-primary outline-none" />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4">
                   <div>
                     <label className="text-xs font-medium text-muted-foreground mb-1 block">Difficulty (1-5)</label>
                     <input required type="number" min={1} max={5} value={form.difficulty} onChange={e => setForm({ ...form, difficulty: +e.target.value })} className="w-full bg-background border rounded-lg px-3 py-2 text-sm focus:border-primary outline-none" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground mb-1 block">Required Hrs</label>
-                    <input required type="number" min={1} value={form.requiredHours} onChange={e => setForm({ ...form, requiredHours: +e.target.value })} className="w-full bg-background border rounded-lg px-3 py-2 text-sm focus:border-primary outline-none" />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">

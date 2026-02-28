@@ -4,7 +4,6 @@ const subjectSchema = new mongoose.Schema({
     subject: { type: String, required: true },
     deadline: { type: Date, required: true },
     difficulty: { type: Number, required: true, min: 1, max: 5 },
-    requiredHours: { type: Number, required: true },
     remainingHours: { type: Number, required: true },
     preferredTime: { type: String, enum: ['Morning', 'Evening', 'Night'], required: true },
     maxDailyHours: { type: Number, required: true },

@@ -10,13 +10,12 @@ const SLOT_CAPACITY = {
 
 exports.addSubject = async (req, res) => {
     try {
-        const { subject, deadline, difficulty, requiredHours, preferredTime, maxDailyHours } = req.body;
+        const { subject, deadline, difficulty, preferredTime, maxDailyHours } = req.body;
         const newSubject = new Subject({
             subject,
             deadline,
             difficulty,
-            requiredHours,
-            remainingHours: requiredHours,
+            remainingHours: 10,
             preferredTime,
             maxDailyHours,
             userId: req.user.id
