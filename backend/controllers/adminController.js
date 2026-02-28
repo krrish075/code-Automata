@@ -2,6 +2,7 @@ const User = require('../models/User');
 const StudySession = require('../models/StudySession');
 const TestResult = require('../models/TestResult');
 const Task = require('../models/Task');
+const LoginLog = require('../models/LoginLog');
 
 // Admin Login
 exports.adminLogin = async (req, res) => {
@@ -47,6 +48,7 @@ exports.getStudentById = async (req, res) => {
         const sessions = await StudySession.find({ studentId: req.params.id });
         const testResults = await TestResult.find({ userId: req.params.id }).sort({ createdAt: -1 });
         const completedTasks = await Task.find({ userId: req.params.id, completed: true });
+        const loginLogs = await LoginLog.find({ userId: req.params.id }).sort({ loginTime: -1 });
 
         let completedCount = 0;
         let totalFocus = 0;
@@ -55,8 +57,8 @@ exports.getStudentById = async (req, res) => {
         // Group study hours by subject
         const subjectHours = {};
 
-        // Group study hours by week/date representation
-        const weeklyTrends = {};
+        // Group exact online seconds by week/date representation
+        const exactDailyOnline = {};
 
         sessions.forEach(s => {
             if (s.status === 'Completed') {
@@ -66,10 +68,6 @@ exports.getStudentById = async (req, res) => {
 
                 // Subjects Chart Data
                 subjectHours[s.subject] = (subjectHours[s.subject] || 0) + s.duration;
-
-                // Trends Chart Data
-                const dateKey = new Date(s.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
-                weeklyTrends[dateKey] = (weeklyTrends[dateKey] || 0) + s.duration;
             }
         });
 
@@ -78,9 +76,11 @@ exports.getStudentById = async (req, res) => {
             const duration = t.eta || 0;
             totalFocus += duration;
             subjectHours[t.subject] = (subjectHours[t.subject] || 0) + duration;
+        });
 
-            const dateKey = new Date(t.updatedAt || t.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
-            weeklyTrends[dateKey] = (weeklyTrends[dateKey] || 0) + duration;
+        loginLogs.forEach(log => {
+            const dateKey = new Date(log.loginTime).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+            exactDailyOnline[dateKey] = (exactDailyOnline[dateKey] || 0) + (log.durationSeconds || 0);
         });
 
         // Convert grouped objects to array format for Recharts, dividing by 60 to convert minutes to hours
@@ -89,9 +89,9 @@ exports.getStudentById = async (req, res) => {
             hours: parseFloat((subjectHours[key] / 60).toFixed(1))
         }));
 
-        const weeklyTrendArr = Object.keys(weeklyTrends).map(key => ({
+        const weeklyTrendArr = Object.keys(exactDailyOnline).map(key => ({
             date: key,
-            hours: parseFloat((weeklyTrends[key] / 60).toFixed(1))
+            hours: parseFloat((exactDailyOnline[key] / 3600).toFixed(2))
         })).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
         const focusScoreAverage = focusScores.length > 0
@@ -115,7 +115,8 @@ exports.getStudentById = async (req, res) => {
             weeklyTrendArr,
             focusScoreAverage,
             completedSessionsCount: completedCount,
-            testResults
+            testResults,
+            loginLogs
         });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });

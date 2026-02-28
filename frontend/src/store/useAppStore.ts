@@ -40,6 +40,7 @@ interface User {
 interface AppState {
   user: User | null;
   token: string | null;
+  sessionId: string | null;
   isAuthenticated: boolean;
   role: string | null;
 
@@ -84,6 +85,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   token: localStorage.getItem('token'),
   isAuthenticated: !!localStorage.getItem('token'),
   role: localStorage.getItem('role') || null,
+  sessionId: localStorage.getItem('sessionId') || null,
 
   xp: 0,
   level: 1,
@@ -147,7 +149,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     const res = await axios.post(`${API_URL}/auth/login`, { email, password });
     setAuthToken(res.data.token);
     localStorage.setItem('role', res.data.role);
-    set({ token: res.data.token, user: res.data.user, isAuthenticated: true, role: res.data.role });
+    if (res.data.sessionId) localStorage.setItem('sessionId', res.data.sessionId);
+    set({ token: res.data.token, user: res.data.user, isAuthenticated: true, role: res.data.role, sessionId: res.data.sessionId || null });
     await get().init(true);
   },
 
@@ -155,7 +158,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     const res = await axios.post(`${API_URL}/auth/register`, { name, email, password });
     setAuthToken(res.data.token);
     localStorage.setItem('role', res.data.role);
-    set({ token: res.data.token, user: res.data.user, isAuthenticated: true, role: res.data.role });
+    if (res.data.sessionId) localStorage.setItem('sessionId', res.data.sessionId);
+    set({ token: res.data.token, user: res.data.user, isAuthenticated: true, role: res.data.role, sessionId: res.data.sessionId || null });
     await get().init(true);
   },
 
@@ -163,7 +167,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     const res = await axios.post(`${API_URL}/auth/guest`);
     setAuthToken(res.data.token);
     localStorage.setItem('role', res.data.role);
-    set({ token: res.data.token, user: res.data.user, isAuthenticated: true, role: res.data.role });
+    if (res.data.sessionId) localStorage.setItem('sessionId', res.data.sessionId);
+    set({ token: res.data.token, user: res.data.user, isAuthenticated: true, role: res.data.role, sessionId: res.data.sessionId || null });
     await get().init(true);
   },
 
@@ -180,11 +185,20 @@ export const useAppStore = create<AppState>((set, get) => ({
     });
   },
 
-  logout: () => {
+  logout: async () => {
+    const state = get();
+    const sid = localStorage.getItem('sessionId');
+    if (sid) {
+      try {
+        await axios.post(`${API_URL}/auth/logout`, { sessionId: sid });
+      } catch (e) { }
+    }
+
     setAuthToken(null);
     localStorage.removeItem('role');
+    localStorage.removeItem('sessionId');
     set({
-      user: null, token: null, isAuthenticated: false, role: null,
+      user: null, token: null, isAuthenticated: false, role: null, sessionId: null,
       tasks: [], timetable: {}, xp: 0, level: 1, streak: 0,
       totalStudyMinutes: 0, focusHours: 0, tasksCompleted: 0, totalTasks: 0
     });

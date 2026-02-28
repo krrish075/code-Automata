@@ -17,6 +17,7 @@ import AdminStudentDetails from "./pages/AdminStudentDetails";
 import NotFound from "./pages/NotFound";
 import { useEffect } from "react";
 import { useAppStore } from "./store/useAppStore";
+import axios from 'axios';
 
 const queryClient = new QueryClient();
 
@@ -36,12 +37,24 @@ const AdminRoute = ({ children }: { children: React.ReactNode }) => {
 };
 
 const App = () => {
-  const init = useAppStore((state) => state.init);
-  const initialized = useAppStore((state) => state.initialized);
+  const { init, initialized, sessionId, isAuthenticated, role } = useAppStore((state) => state);
 
   useEffect(() => {
     init();
   }, [init]);
+
+  // Heartbeat ping to track precise session durations
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isAuthenticated && role !== 'admin' && sessionId) {
+      // Ping every 60 seconds
+      interval = setInterval(() => {
+        axios.post(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/users/activity`, { sessionId })
+          .catch(() => { });
+      }, 60000);
+    }
+    return () => clearInterval(interval);
+  }, [isAuthenticated, role, sessionId]);
 
   if (!initialized) {
     return (

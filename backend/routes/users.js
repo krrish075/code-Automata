@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
 const StudySession = require('../models/StudySession');
+const LoginLog = require('../models/LoginLog');
 const auth = require('../middleware/auth');
 
 // Get me
@@ -67,6 +68,24 @@ router.get('/study-session', auth, async (req, res) => {
         res.json(sessions);
     } catch (err) {
         res.status(500).json({ message: err.message });
+    }
+});
+// Heartbeat ping
+router.post('/activity', async (req, res) => {
+    const { sessionId } = req.body;
+    if (!sessionId) return res.json({ success: true });
+
+    try {
+        const logEntry = await LoginLog.findById(sessionId);
+        if (logEntry) {
+            logEntry.logoutTime = new Date();
+            logEntry.durationSeconds = Math.floor((logEntry.logoutTime - logEntry.loginTime) / 1000);
+            await logEntry.save();
+        }
+        res.json({ success: true });
+    } catch (err) {
+        // Silently fail on heartbeat errors to prevent console spam
+        res.json({ success: false });
     }
 });
 

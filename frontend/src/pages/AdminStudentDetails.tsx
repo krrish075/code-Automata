@@ -124,7 +124,7 @@ const AdminStudentDetails = () => {
 
                 {/* Weekly Trend Line Chart */}
                 <div className="glass-card p-6 min-h-[400px]">
-                    <h2 className="text-lg font-bold font-display text-foreground mb-6">Study Trend Over Time</h2>
+                    <h2 className="text-lg font-bold font-display text-foreground mb-6">Exact Hours Spent on Website</h2>
                     {data.weeklyTrendArr.length > 0 ? (
                         <ResponsiveContainer width="100%" height={300}>
                             <LineChart data={data.weeklyTrendArr}>
@@ -251,6 +251,43 @@ const AdminStudentDetails = () => {
                                 </div>
                             );
                         })}
+                    </div>
+                )}
+            </div>
+
+            {/* Login History Section */}
+            <h2 className="text-xl font-display font-bold text-foreground mb-4">Login History</h2>
+            <div className="mb-8 glass-card overflow-hidden">
+                {(!data.loginLogs || data.loginLogs.length === 0) ? (
+                    <div className="p-8 text-center text-muted-foreground">
+                        No login records found.
+                    </div>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left text-sm">
+                            <thead className="bg-background/50 text-muted-foreground border-b border-border">
+                                <tr>
+                                    <th className="px-6 py-4 font-medium">Session Date</th>
+                                    <th className="px-6 py-4 font-medium">Login Time</th>
+                                    <th className="px-6 py-4 font-medium">Logout Time</th>
+                                    <th className="px-6 py-4 font-medium">Duration</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border/50">
+                                {data.loginLogs.map((log: any) => (
+                                    <tr key={log._id} className="hover:bg-background/30 transition-colors">
+                                        <td className="px-6 py-4 text-foreground">{dayjs(log.loginTime).format('MMM D, YYYY')}</td>
+                                        <td className="px-6 py-4 text-primary">{dayjs(log.loginTime).format('h:mm A')}</td>
+                                        <td className="px-6 py-4 text-accent">{log.logoutTime ? dayjs(log.logoutTime).format('h:mm A') : 'Active...'}</td>
+                                        <td className="px-6 py-4 font-medium text-foreground">
+                                            {log.durationSeconds >= 60
+                                                ? `${Math.floor(log.durationSeconds / 60)}m ${log.durationSeconds % 60}s`
+                                                : `${log.durationSeconds}s`}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
                     </div>
                 )}
             </div>

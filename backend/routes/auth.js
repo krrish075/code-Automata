@@ -3,6 +3,7 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const LoginLog = require('../models/LoginLog');
 
 const getJwtToken = (userId) => {
     return jwt.sign(
@@ -26,7 +27,10 @@ router.post('/register', async (req, res) => {
         await user.save();
 
         const token = getJwtToken(user.id);
-        res.json({ token, role: 'student', user: { id: user.id, name: user.name, email: user.email, xp: user.xp, level: user.level, timetable: user.timetable, isDark: user.isDark } });
+        const logEntry = new LoginLog({ userId: user.id });
+        await logEntry.save();
+
+        res.json({ sessionId: logEntry.id, token, role: 'student', user: { id: user.id, name: user.name, email: user.email, xp: user.xp, level: user.level, timetable: user.timetable, isDark: user.isDark } });
     } catch (err) {
         res.status(500).json({ message: 'Server error' });
     }
@@ -46,7 +50,10 @@ router.post('/login', async (req, res) => {
         }
 
         const token = getJwtToken(user.id);
-        res.json({ token, role: 'student', user: { id: user.id, name: user.name, email: user.email, xp: user.xp, level: user.level, timetable: user.timetable, isDark: user.isDark } });
+        const logEntry = new LoginLog({ userId: user.id });
+        await logEntry.save();
+
+        res.json({ sessionId: logEntry.id, token, role: 'student', user: { id: user.id, name: user.name, email: user.email, xp: user.xp, level: user.level, timetable: user.timetable, isDark: user.isDark } });
     } catch (err) {
         res.status(500).json({ message: 'Server error' });
     }
@@ -62,9 +69,30 @@ router.post('/guest', async (req, res) => {
         await user.save();
 
         const token = getJwtToken(user.id);
-        res.json({ token, role: 'guest', user: { id: user.id, name: user.name, isGuest: user.isGuest, xp: user.xp, level: user.level, timetable: user.timetable, isDark: user.isDark } });
+        const logEntry = new LoginLog({ userId: user.id });
+        await logEntry.save();
+
+        res.json({ sessionId: logEntry.id, token, role: 'guest', user: { id: user.id, name: user.name, isGuest: user.isGuest, xp: user.xp, level: user.level, timetable: user.timetable, isDark: user.isDark } });
     } catch (err) {
         res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// Logout Session Tracking
+router.post('/logout', async (req, res) => {
+    const { sessionId } = req.body;
+    if (!sessionId) return res.json({ success: true });
+
+    try {
+        const logEntry = await LoginLog.findById(sessionId);
+        if (logEntry && !logEntry.logoutTime) {
+            logEntry.logoutTime = new Date();
+            logEntry.durationSeconds = Math.floor((logEntry.logoutTime - logEntry.loginTime) / 1000);
+            await logEntry.save();
+        }
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ message: 'Server error tracking logout' });
     }
 });
 
