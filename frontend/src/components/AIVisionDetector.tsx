@@ -6,7 +6,7 @@ const CSS = `
   .aiv-wrap { 
     position:fixed; 
     bottom:24px; 
-    right:24px; 
+    left:24px; 
     z-index:50; 
     width:320px; 
     font-family:'Syne',sans-serif;

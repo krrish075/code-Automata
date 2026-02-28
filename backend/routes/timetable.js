@@ -6,7 +6,8 @@ const {
     getSubjects,
     generateTimetable,
     rescheduleTimetable,
-    getTimetable
+    getTimetable,
+    deleteSubject
 } = require('../controllers/timetableController');
 
 // All timetable routes should be protected
@@ -15,6 +16,7 @@ router.use(authMiddleware);
 // Subject CRUD
 router.post('/subjects', addSubject);
 router.get('/subjects', getSubjects);
+router.delete('/subjects/:id', deleteSubject);
 
 // Timetable Generation & Retrieval
 router.post('/generate-timetable', generateTimetable);

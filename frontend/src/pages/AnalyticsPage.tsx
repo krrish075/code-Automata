@@ -1,4 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '@/store/useAppStore';
 import { useEffect, useState, useMemo } from 'react';
 import {
@@ -15,6 +16,7 @@ const focusColors = ['hsl(239, 84%, 67%)', 'hsl(var(--muted))'];
 
 const AnalyticsPage = () => {
   const { tasksCompleted, totalTasks, streak, focusHours, totalStudyMinutes, fetchTestHistory, token } = useAppStore();
+  const navigate = useNavigate();
   const [testHistory, setTestHistory] = useState<any[]>([]);
   const [expandedTest, setExpandedTest] = useState<string | null>(null);
   const [sessions, setSessions] = useState<any[]>([]);
@@ -210,9 +212,20 @@ const AnalyticsPage = () => {
                     <div className="flex items-center gap-6">
                       <div className="text-right">
                         <p className="font-bold text-lg text-foreground">{test.score} / {test.totalQuestions}</p>
-                        <p className="text-xs text-muted-foreground">Score</p>
+                        <p className="text-xs text-muted-foreground mr-2 border-r border-border pr-3">Score</p>
                       </div>
-                      {isExpanded ? <ChevronUp className="w-5 h-5 text-muted-foreground" /> : <ChevronDown className="w-5 h-5 text-muted-foreground" />}
+
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate('/work-test', { state: { restartTest: test } });
+                        }}
+                        className="px-4 py-2 text-xs font-semibold bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors shadow-sm whitespace-nowrap"
+                      >
+                        Try Again (10m)
+                      </button>
+
+                      {isExpanded ? <ChevronUp className="w-5 h-5 text-muted-foreground ml-2" /> : <ChevronDown className="w-5 h-5 text-muted-foreground ml-2" />}
                     </div>
                   </button>
 

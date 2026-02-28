@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { UploadCloud, FileText, CheckCircle, Zap, RefreshCw, Image as ImageIcon, Clock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -7,7 +8,21 @@ import { NLPEngine, MCQQuestion } from '../utils/nlpEngine';
 import { useAppStore } from '@/store/useAppStore';
 import AIVisionDetector from '../components/AIVisionDetector';
 
+const EXAM_DURATION_SECONDS = 10 * 60; // 10 minutes
+const MARKS_CORRECT = 1;
+const MARKS_WRONG = 0;
+
 const WorkTestPage = () => {
+    // Safety cleanup for any residual HMR lockdown styles
+    useEffect(() => {
+        document.body.style.overflow = '';
+        document.body.style.userSelect = '';
+        return () => {
+            document.body.style.overflow = '';
+            document.body.style.userSelect = '';
+        };
+    }, []);
+
     const [workText, setWorkText] = useState('');
     const [isGenerating, setIsGenerating] = useState(false);
     const [isScanning, setIsScanning] = useState(false);
@@ -16,12 +31,50 @@ const WorkTestPage = () => {
     const [questions, setQuestions] = useState<MCQQuestion[]>([]);
     const [answers, setAnswers] = useState<Record<number, number>>({});
     const [submitted, setSubmitted] = useState(false);
+    const [attempts, setAttempts] = useState(1);
     const [cheatWarnings, setCheatWarnings] = useState(0);
     const [subjectName, setSubjectName] = useState('');
     const [testName, setTestName] = useState('');
+    const [isQuickRestart, setIsQuickRestart] = useState(false);
+    const [testRemarks, setTestRemarks] = useState('');
+
     const { toast } = useToast();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const { saveTestResult } = useAppStore();
+    const location = useLocation();
+    const navigate = useNavigate();
+
+    // Check for incoming Historical Test Restarts from Analytics
+    useEffect(() => {
+        const restartTest = location.state?.restartTest;
+        if (restartTest) {
+            setSubjectName(restartTest.subjectName || '');
+            setTestName(restartTest.testName || '');
+
+            // Map MongoDB questions back to MCQQuestion format
+            const mappedQuestions: MCQQuestion[] = restartTest.questions.map((q: any, i: number) => ({
+                id: i,
+                question: q.questionText,
+                options: q.options,
+                correctIndex: q.correctIndex,
+                explanation: q.explanation,
+                difficulty: q.difficulty || 'Medium'
+            }));
+
+            setQuestions(mappedQuestions);
+            setIsQuickRestart(true);
+            setAttempts(1);
+            setAnswers({});
+            setTimeLeft(null);
+            setSubmitted(false);
+            setCheatWarnings(0);
+            setTestRemarks('');
+            setTestGenerated(true);
+
+            // Clean router state so refresh doesn't trigger again
+            navigate(location.pathname, { replace: true });
+        }
+    }, [location.state, navigate, location.pathname]);
 
     const handleGenerate = () => {
         if (!workText.trim()) {
@@ -36,9 +89,11 @@ const WorkTestPage = () => {
         setIsGenerating(true);
         setTestGenerated(false);
         setSubmitted(false);
+        setAttempts(1);
         setAnswers({});
         setTimeLeft(null);
         setCheatWarnings(0);
+        setTestRemarks('');
 
         setTimeout(() => {
             const engine = new NLPEngine(workText);
@@ -121,12 +176,40 @@ const WorkTestPage = () => {
         setAnswers(prev => ({ ...prev, [qId]: optionIdx }));
     };
 
-    const calculateScore = () => {
-        let score = 0;
-        questions.forEach(q => {
-            if (answers[q.id] === q.correctIndex) score++;
+    const handleRestartTest = () => {
+        if (attempts >= 3) return;
+        setAttempts(prev => prev + 1);
+        setSubmitted(false);
+        setAnswers({});
+        setTimeLeft(null);
+        setCheatWarnings(0);
+        setTestRemarks('');
+        toast({
+            title: "Test Restarted",
+            description: `Attempt ${attempts + 1} of 3. Starting video feed...`,
         });
-        return score;
+    };
+
+    const calculateResult = () => {
+        let correct = 0;
+        let wrong = 0;
+        let skipped = 0;
+
+        questions.forEach(q => {
+            if (answers[q.id] === undefined || answers[q.id] === null || answers[q.id] === -1) {
+                skipped++;
+            } else if (answers[q.id] === q.correctIndex) {
+                correct++;
+            } else {
+                wrong++;
+            }
+        });
+
+        let score = correct * MARKS_CORRECT + wrong * MARKS_WRONG;
+        if (cheatWarnings >= 3 && score > 0) {
+            score = Number((score * 0.7).toFixed(1));
+        }
+        return { correct, wrong, skipped, score };
     };
 
     useEffect(() => {
@@ -165,12 +248,12 @@ const WorkTestPage = () => {
     };
 
     const handleMaxWarningsReached = () => {
+        setCheatWarnings(3);
         toast({
-            title: "Test Terminated",
-            description: "Multiple cheating attempts detected. Submitting test.",
+            title: "Anti-Cheat Penalty",
+            description: "Multiple cheating attempts detected. A 30% score penalty will be applied to your final result.",
             variant: "destructive"
         });
-        handleSubmit(true, "Anti-cheating system detects cheating");
     };
 
     const handleSubmit = async (autoSubmit = false, remarks = "Completed normally") => {
@@ -184,12 +267,19 @@ const WorkTestPage = () => {
         }
         setSubmitted(true);
 
+        const isCheating = cheatWarnings >= 3;
+        const actualRemarks = isCheating
+            ? "Anti-cheating system detects cheating (30% Penalty Applied)"
+            : (autoSubmit ? "Auto-submitted (Time's up)" : remarks);
+
+        setTestRemarks(actualRemarks);
+
         const testData = {
             subjectName: subjectName.trim() || 'General',
-            testName: testName.trim() || 'Practice Test',
-            score: calculateScore(),
+            testName: `${testName.trim() || 'Practice Test'} (Attempt ${attempts})`,
+            score: calculateResult().score,
             totalQuestions: questions.length,
-            remarks: autoSubmit && cheatWarnings >= 3 ? "Anti-cheating system detects cheating" : remarks,
+            remarks: actualRemarks,
             questions: questions.map((q) => ({
                 questionText: q.question,
                 options: q.options,
@@ -337,13 +427,29 @@ const WorkTestPage = () => {
                                             {formatTime(timeLeft)}
                                         </div>
                                     )}
-                                    {submitted && (
-                                        <span className="px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-semibold">
-                                            Score: {calculateScore()} / {questions.length}
-                                        </span>
-                                    )}
+                                    {submitted && (() => {
+                                        const res = calculateResult();
+                                        return (
+                                            <div className="flex items-center gap-2">
+                                                <span className="px-2 py-1 rounded-md bg-success/10 text-success text-xs font-semibold hidden sm:inline-block">Correct: {res.correct}</span>
+                                                <span className="px-2 py-1 rounded-md bg-destructive/10 text-destructive text-xs font-semibold hidden sm:inline-block">Wrong: {res.wrong}</span>
+                                                <span className="px-2 py-1 rounded-md bg-muted text-muted-foreground text-xs font-semibold hidden sm:inline-block">Skipped: {res.skipped}</span>
+                                                <span className="px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-bold sm:ml-2">
+                                                    Score: {res.score} / {questions.length}
+                                                </span>
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
                             </div>
+
+                            {submitted && testRemarks && testRemarks !== "Completed normally" && (
+                                <div className="mb-6 flex justify-end">
+                                    <span className="px-4 py-2 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm font-bold animate-pulse flex items-center gap-2">
+                                        ⚠️ {testRemarks}
+                                    </span>
+                                </div>
+                            )}
 
                             <div className="space-y-6 flex-grow overflow-y-auto pr-2 custom-scrollbar">
                                 <AnimatePresence>
@@ -355,14 +461,24 @@ const WorkTestPage = () => {
                                             transition={{ delay: i * 0.1 }}
                                             className="p-4 rounded-xl border border-border bg-background/50"
                                         >
-                                            <div className="flex items-center justify-between mb-3">
-                                                <h3 className="font-medium text-foreground pr-4 break-words">{i + 1}. {q.question}</h3>
-                                                <span className={`text-xs px-2 py-1 rounded-md border flex-shrink-0 ${q.difficulty === 'Hard' ? 'bg-destructive/10 text-destructive border-destructive' :
-                                                    q.difficulty === 'Easy' ? 'bg-success/10 text-success border-success' :
-                                                        'bg-primary/10 text-primary border-primary'
-                                                    }`}>
-                                                    {q.difficulty}
-                                                </span>
+                                            <div className="flex items-start justify-between mb-3 gap-2">
+                                                <h3 className="font-medium text-foreground break-words flex-grow">{i + 1}. {q.question}</h3>
+                                                <div className="flex items-center gap-2 flex-shrink-0">
+                                                    {!submitted && answers[q.id] !== undefined && (
+                                                        <button
+                                                            onClick={() => setAnswers(prev => { const n = { ...prev }; delete n[q.id]; return n; })}
+                                                            className="text-xs px-2 py-1 rounded-md border bg-muted/50 text-muted-foreground hover:bg-muted transition-colors"
+                                                        >
+                                                            Clear
+                                                        </button>
+                                                    )}
+                                                    <span className={`text-xs px-2 py-1 rounded-md border ${q.difficulty === 'Hard' ? 'bg-destructive/10 text-destructive border-destructive' :
+                                                        q.difficulty === 'Easy' ? 'bg-success/10 text-success border-success' :
+                                                            'bg-primary/10 text-primary border-primary'
+                                                        }`}>
+                                                        {q.difficulty}
+                                                    </span>
+                                                </div>
                                             </div>
                                             <div className="space-y-2">
                                                 {q.options.map((opt, optIdx) => {
@@ -422,6 +538,20 @@ const WorkTestPage = () => {
                                     </button>
                                 </div>
                             )}
+
+                            {submitted && attempts < 3 && (
+                                <div className="pt-6 mt-4 border-t border-border flex flex-col items-center">
+                                    <button
+                                        onClick={handleRestartTest}
+                                        className="w-full py-3 rounded-xl bg-primary/10 text-primary font-semibold shadow-sm hover:bg-primary/20 transition-all border border-primary/20"
+                                    >
+                                        Restart Test (Attempt {attempts + 1}/3)
+                                    </button>
+                                    <p className="text-xs text-muted-foreground mt-2">
+                                        You can take this test up to 3 times. All attempts are saved in your Analytics.
+                                    </p>
+                                </div>
+                            )}
                         </div>
                     )}
                 </motion.div>
@@ -433,9 +563,9 @@ const WorkTestPage = () => {
                     onReady={() => {
                         // Start test timer once AIVisionDetector is fully active
                         if (timeLeft === null) {
-                            setTimeLeft(600); // 10 minutes (600 seconds)
+                            setTimeLeft(isQuickRestart ? 600 : EXAM_DURATION_SECONDS);
                             toast({
-                                title: "Timer Started",
+                                title: isQuickRestart ? "10-Min Speed Test Started" : "Timer Started",
                                 description: "AI Vision is active. Good luck on your test!",
                             });
                         }

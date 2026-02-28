@@ -1,24 +1,21 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowRight, ArrowLeft, Clock, Sunrise, Moon as MoonIcon, Plus, RefreshCw, Calendar, Trash2 } from 'lucide-react';
+import { ArrowRight, ArrowLeft, Clock, Sunrise, Moon as MoonIcon, Plus, RefreshCw, Calendar, Trash2, Smile } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { useToast } from '@/hooks/use-toast';
 import axios from 'axios';
+import EmojiPicker, { Theme } from 'emoji-picker-react';
 
 const API_URL = 'http://localhost:5000/api';
 
 const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-const timeSlots = ['6:00', '7:00', '8:00', '9:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00'];
-const slotTypes = ['free', 'study', 'work', 'sleep'] as const;
-const slotColors: Record<string, string> = {
-  free: 'bg-muted text-muted-foreground',
-  study: 'bg-primary/15 text-primary border-primary/30',
-  work: 'bg-secondary/15 text-secondary border-secondary/30',
-  sleep: 'bg-accent/15 text-accent border-accent/30',
-};
-const slotLabels: Record<string, string> = { free: '—', study: '📚', work: '💼', sleep: '😴' };
+const timeSlots = [
+  '4:00', '5:00', '6:00', '7:00', '8:00', '9:00', '10:00', '11:00', '12:00',
+  '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00',
+  '21:00', '22:00', '23:00', '0:00', '1:00', '2:00', '3:00'
+];
 
-type Grid = Record<string, Record<string, typeof slotTypes[number]>>;
+type Grid = Record<string, Record<string, string>>;
 
 interface SmartSubject {
   _id: string;
@@ -41,20 +38,26 @@ interface SmartSlot {
 }
 
 const TimetablePage = () => {
-  const { timetable, updateTimetable, token } = useAppStore();
+  const { timetable, updateTimetable, token, isDark } = useAppStore();
   const { toast } = useToast();
 
   const [activeTab, setActiveTab] = useState<'manual' | 'smart'>('smart');
 
   // Manual State
+  const [activeEmojiCell, setActiveEmojiCell] = useState<{ day: string, time: string } | null>(null);
   const [step, setStep] = useState(0);
   const [wake, setWake] = useState(7);
   const [bed, setBed] = useState(23);
   const [isSaving, setIsSaving] = useState(false);
   const [grid, setGrid] = useState<Grid>(() => {
-    if (Object.keys(timetable).length > 0) return timetable as Grid;
     const g: Grid = {};
-    days.forEach(d => { g[d] = {}; timeSlots.forEach(t => { g[d][t] = parseInt(t) >= 23 || parseInt(t) < 7 ? 'sleep' : 'free'; }); });
+    days.forEach(d => {
+      g[d] = {};
+      timeSlots.forEach(t => {
+        // Safely map over existing timetable to prevent legacy crashes
+        g[d][t] = (timetable && timetable[d] && timetable[d][t]) ? timetable[d][t] : '';
+      });
+    });
     return g;
   });
 
@@ -93,6 +96,16 @@ const TimetablePage = () => {
       await axios.post(`${API_URL}/timetable/subjects`, form, { headers: { Authorization: `Bearer ${token}` } });
       toast({ title: 'Success', description: 'Subject added.' });
       setForm({ ...form, subject: '', requiredHours: 10 });
+      fetchSmartData();
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    }
+  };
+
+  const handleDeleteSubject = async (id: string) => {
+    try {
+      await axios.delete(`${API_URL}/timetable/subjects/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+      toast({ title: 'Success', description: 'Subject removed.' });
       fetchSmartData();
     } catch (err: any) {
       toast({ title: 'Error', description: err.message, variant: 'destructive' });
@@ -216,7 +229,7 @@ const TimetablePage = () => {
                   </div>
                 ) : (
                   subjects.map(sub => (
-                    <div key={sub._id} className="flex items-center justify-between p-3 rounded-xl bg-background border">
+                    <div key={sub._id} className="flex items-center justify-between p-3 rounded-xl bg-background border group transition-colors hover:border-border/80">
                       <div>
                         <h4 className="font-semibold text-sm text-foreground">{sub.subject}</h4>
                         <div className="text-xs text-muted-foreground flex gap-3 mt-1">
@@ -225,6 +238,13 @@ const TimetablePage = () => {
                           <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${sub.difficulty >= 4 ? 'bg-destructive/10 text-destructive' : 'bg-primary/10 text-primary'}`}>Lvl {sub.difficulty}</span>
                         </div>
                       </div>
+                      <button
+                        onClick={() => handleDeleteSubject(sub._id)}
+                        className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                        title="Remove Subject"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   ))
                 )}
@@ -282,45 +302,72 @@ const TimetablePage = () => {
         </motion.div>
       )}
 
-      {/* Manual Tab (Original Implementation truncated for simplicity but fully functional) */}
+      {/* Manual Tab */}
       {activeTab === 'manual' && (
         <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
-          <div className="flex justify-end mb-4 gap-4">
+          <div className="flex justify-between items-center mb-4">
+            <p className="text-sm text-muted-foreground">Type directly into the blocks to schedule your day.</p>
             <button onClick={async () => {
               try {
                 await updateTimetable(grid);
                 toast({ title: 'Success', description: 'Manual timetable saved.' });
               } catch (e) { toast({ title: 'Error', variant: 'destructive', description: 'Failed to save.' }); }
-            }} className="gradient-bg text-primary-foreground px-4 py-2 rounded-lg font-medium shadow-md">
+            }} className="gradient-bg text-primary-foreground px-5 py-2 rounded-lg font-medium shadow-md hover:shadow-lg transition-shadow">
               Save Manual Timetable
             </button>
           </div>
-          <div className="glass-card p-4 overflow-x-auto">
-            <table className="w-full min-w-[600px]">
+
+          <div className="glass-card overflow-x-auto excel-table-wrap">
+            <table className="w-full min-w-[700px] border-collapse text-xs">
               <thead>
                 <tr>
-                  <th className="p-2 text-xs text-muted-foreground font-medium">Time</th>
-                  {days.map(d => <th key={d} className="p-2 text-xs font-semibold text-foreground">{d}</th>)}
+                  <th className="p-1 px-2 text-muted-foreground font-medium border-b border-border/50 text-right sticky left-0 bg-card z-10 w-16">Time</th>
+                  {days.map(d => <th key={d} className="p-1.5 font-semibold text-foreground border-b border-l border-border/50 bg-muted/20">{d}</th>)}
                 </tr>
               </thead>
               <tbody>
                 {timeSlots.map(t => (
-                  <tr key={t}>
-                    <td className="p-1 text-xs text-muted-foreground font-mono text-center">{t}</td>
+                  <tr key={t} className="hover:bg-muted/10 transition-colors">
+                    <td className="p-1 px-2 text-muted-foreground font-mono text-right border-b border-border/30 sticky left-0 bg-card z-10 w-16">{t}</td>
                     {days.map(d => {
-                      const type = grid[d]?.[t] || 'free';
+                      const val = grid[d]?.[t] || '';
+                      const isEmojiActive = activeEmojiCell?.day === d && activeEmojiCell?.time === t;
+
                       return (
-                        <td key={d} className="p-1">
-                          <button onClick={() => {
-                            if (grid[d][t] === 'sleep') return;
-                            const idx = slotTypes.indexOf(type);
-                            const next = slotTypes[(idx + 1) % slotTypes.length];
-                            setGrid(prev => ({ ...prev, [d]: { ...prev[d], [t]: next === 'sleep' ? 'free' : next } }));
-                          }}
-                            className={`w-full h-9 rounded-lg text-xs font-medium border transition-colors ${slotColors[type]} ${type === 'sleep' ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:opacity-80'}`}
-                          >
-                            {slotLabels[type]}
-                          </button>
+                        <td key={d} className="p-0 border-b border-l border-border/30 h-8 relative group">
+                          <div className="flex items-center w-full h-full relative">
+                            <input
+                              type="text"
+                              value={val}
+                              onChange={(e) => setGrid(prev => ({ ...prev, [d]: { ...prev[d], [t]: e.target.value } }))}
+                              className="w-full h-full bg-transparent pl-2 pr-6 py-1 outline-none focus:bg-primary/5 focus:ring-1 focus:ring-primary/50 text-foreground transition-all placeholder:text-muted-foreground/30"
+                              placeholder="..."
+                              onFocus={() => setActiveEmojiCell(null)}
+                            />
+                            <button
+                              onClick={() => setActiveEmojiCell(isEmojiActive ? null : { day: d, time: t })}
+                              className={`absolute right-1 p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-all ${isEmojiActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+                            >
+                              <Smile className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          {/* Floating Emoji Picker for this specific cell */}
+                          {isEmojiActive && (
+                            <div className="absolute top-10 left-0 z-50 shadow-2xl">
+                              <div className="fixed inset-0 z-40" onClick={() => setActiveEmojiCell(null)} />
+                              <div className="relative z-50">
+                                <EmojiPicker
+                                  theme={isDark ? Theme.DARK : Theme.LIGHT}
+                                  onEmojiClick={(emojiData) => {
+                                    setGrid(prev => ({ ...prev, [d]: { ...prev[d], [t]: val + emojiData.emoji } }));
+                                  }}
+                                  width={280}
+                                  height={350}
+                                />
+                              </div>
+                            </div>
+                          )}
                         </td>
                       );
                     })}

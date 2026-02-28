@@ -59,7 +59,7 @@ const AdminStudentDetails = () => {
 
             {/* Stats Overview - Study Metrics */}
             <h2 className="text-xl font-display font-bold text-foreground mb-4">Study Metrics</h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                 <div className="glass-card p-4 flex flex-col items-center justify-center text-center">
                     <Clock className="w-6 h-6 text-primary mb-2" />
                     <p className="text-2xl font-bold font-display text-foreground">{Math.floor(data.totalStudyHours)}h</p>
@@ -74,11 +74,6 @@ const AdminStudentDetails = () => {
                     <CheckCircle className="w-6 h-6 text-emerald-500 mb-2" />
                     <p className="text-2xl font-bold font-display text-foreground">{data.completedSessionsCount}</p>
                     <p className="text-xs text-muted-foreground">Completed Sessions</p>
-                </div>
-                <div className="glass-card p-4 flex flex-col items-center justify-center text-center">
-                    <XCircle className="w-6 h-6 text-destructive mb-2" />
-                    <p className="text-2xl font-bold font-display text-foreground">{data.missedSessionsCount}</p>
-                    <p className="text-xs text-muted-foreground">Missed Sessions</p>
                 </div>
             </div>
 
@@ -172,7 +167,17 @@ const AdminStudentDetails = () => {
                                                 </span>
                                                 <h3 className="font-semibold text-lg text-foreground">{test.testName}</h3>
                                             </div>
-                                            <p className="text-sm text-muted-foreground">{formattedDate}</p>
+                                            <p className="text-sm text-muted-foreground mb-1">{formattedDate}</p>
+
+                                            {test.remarks && (
+                                                <div className={`mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold ${test.remarks.includes("Anti-cheating")
+                                                    ? 'bg-destructive/10 text-destructive border border-destructive/20'
+                                                    : 'bg-muted/50 text-muted-foreground border border-border'
+                                                    }`}>
+                                                    {test.remarks.includes("Anti-cheating") ? '⚠️ ' : 'ℹ️ '}
+                                                    {test.remarks}
+                                                </div>
+                                            )}
                                         </div>
                                         <div className="flex items-center gap-6">
                                             <div className="text-right">

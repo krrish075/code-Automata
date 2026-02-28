@@ -37,6 +37,17 @@ exports.getSubjects = async (req, res) => {
     }
 };
 
+exports.deleteSubject = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const subject = await Subject.findOneAndDelete({ _id: id, userId: req.user.id });
+        if (!subject) return res.status(404).json({ message: 'Subject not found' });
+        res.json({ message: 'Subject removed successfully' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
 const calculatePriority = (subject, daysRemaining) => {
     if (daysRemaining <= 0) return 9999;
 

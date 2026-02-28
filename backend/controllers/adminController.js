@@ -1,6 +1,7 @@
 const User = require('../models/User');
 const StudySession = require('../models/StudySession');
 const TestResult = require('../models/TestResult');
+const Task = require('../models/Task');
 
 // Admin Login
 exports.adminLogin = async (req, res) => {
@@ -45,9 +46,9 @@ exports.getStudentById = async (req, res) => {
 
         const sessions = await StudySession.find({ studentId: req.params.id });
         const testResults = await TestResult.find({ userId: req.params.id }).sort({ createdAt: -1 });
+        const completedTasks = await Task.find({ userId: req.params.id, completed: true });
 
         let completedCount = 0;
-        let missedCount = 0;
         let totalFocus = 0;
         let focusScores = [];
 
@@ -69,20 +70,28 @@ exports.getStudentById = async (req, res) => {
                 // Trends Chart Data
                 const dateKey = new Date(s.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
                 weeklyTrends[dateKey] = (weeklyTrends[dateKey] || 0) + s.duration;
-            } else {
-                missedCount++;
             }
         });
 
-        // Convert grouped objects to array format for Recharts
+        // Add completed task durations (eta in minutes) to total focus and charts
+        completedTasks.forEach(t => {
+            const duration = t.eta || 0;
+            totalFocus += duration;
+            subjectHours[t.subject] = (subjectHours[t.subject] || 0) + duration;
+
+            const dateKey = new Date(t.updatedAt || t.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+            weeklyTrends[dateKey] = (weeklyTrends[dateKey] || 0) + duration;
+        });
+
+        // Convert grouped objects to array format for Recharts, dividing by 60 to convert minutes to hours
         const subjectsStudied = Object.keys(subjectHours).map(key => ({
             subject: key,
-            hours: subjectHours[key]
+            hours: parseFloat((subjectHours[key] / 60).toFixed(1))
         }));
 
         const weeklyTrendArr = Object.keys(weeklyTrends).map(key => ({
             date: key,
-            hours: weeklyTrends[key]
+            hours: parseFloat((weeklyTrends[key] / 60).toFixed(1))
         })).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
         const focusScoreAverage = focusScores.length > 0
@@ -101,12 +110,11 @@ exports.getStudentById = async (req, res) => {
                 tasksCompleted: student.tasksCompleted,
                 totalTasks: student.totalTasks
             },
-            totalStudyHours: totalFocus,
+            totalStudyHours: totalFocus / 60,
             subjectsStudied,
             weeklyTrendArr,
             focusScoreAverage,
             completedSessionsCount: completedCount,
-            missedSessionsCount: missedCount,
             testResults
         });
     } catch (error) {
