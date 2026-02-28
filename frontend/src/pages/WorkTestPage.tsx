@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { UploadCloud, FileText, CheckCircle, Zap, RefreshCw, Image as ImageIcon, Clock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import Tesseract from 'tesseract.js';
+import * as mammoth from 'mammoth';
 import { NLPEngine, MCQQuestion } from '../utils/nlpEngine';
 import { useAppStore } from '@/store/useAppStore';
 import AIVisionDetector from '../components/AIVisionDetector';
@@ -124,43 +125,66 @@ const WorkTestPage = () => {
         const file = e.target.files?.[0];
         if (!file) return;
 
-        if (!file.type.startsWith('image/')) {
-            toast({
-                title: "Invalid File",
-                description: "Please upload an image file (PNG, JPG) for text extraction.",
-                variant: "destructive"
-            });
-            return;
-        }
-
         setIsScanning(true);
         toast({
-            title: "Scanning Image...",
-            description: "Extracting text using OCR. This might take a moment.",
+            title: "Processing File...",
+            description: "Extracting text from your document. This might take a moment.",
         });
 
         try {
-            const result = await Tesseract.recognize(file, 'eng');
-            const text = result.data.text;
+            let text = '';
+
+            if (file.type === "application/pdf" || file.name.toLowerCase().endsWith('.pdf')) {
+                // Ensure pdf.js is loaded dynamically from CDN to bypass Vite Module graph issues
+                if (!(window as any).pdfjsLib) {
+                    await new Promise<void>((resolve, reject) => {
+                        const script = document.createElement('script');
+                        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+                        script.onload = () => resolve();
+                        script.onerror = () => reject(new Error("Failed to load PDF.js library"));
+                        document.head.appendChild(script);
+                    });
+                }
+
+                const pdfLib = (window as any).pdfjsLib;
+                pdfLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+                const arrayBuffer = await file.arrayBuffer();
+                const pdf = await pdfLib.getDocument({ data: arrayBuffer }).promise;
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const content = await page.getTextContent();
+                    text += content.items.map((item: any) => item.str).join(' ') + '\n';
+                }
+            } else if (file.name.toLowerCase().endsWith('.docx') || file.name.toLowerCase().endsWith('.doc')) {
+                const arrayBuffer = await file.arrayBuffer();
+                const result = await mammoth.extractRawText({ arrayBuffer });
+                text = result.value;
+            } else if (file.type.startsWith('image/')) {
+                const result = await Tesseract.recognize(file, 'eng');
+                text = result.data.text;
+            } else {
+                throw new Error("Unsupported file type. Please upload a PDF, DOCX, or Image.");
+            }
 
             if (text.trim()) {
                 setWorkText(prev => prev ? prev + '\n\n' + text : text);
                 toast({
-                    title: "Scan Complete",
-                    description: "Text extracted successfully!",
+                    title: "Extraction Complete",
+                    description: "Text parsed successfully!",
                 });
             } else {
                 toast({
                     title: "No Text Found",
-                    description: "We couldn't detect any readable text in that image.",
+                    description: "We couldn't detect any readable text in that file.",
                     variant: "destructive"
                 });
             }
-        } catch (err) {
-            console.error("OCR Error:", err);
+        } catch (err: any) {
+            console.error("Extraction Error:", err);
             toast({
-                title: "Scan Failed",
-                description: "An error occurred while trying to read the image.",
+                title: "Processing Failed",
+                description: err.message || "An error occurred while trying to read the file.",
                 variant: "destructive"
             });
         } finally {
@@ -348,7 +372,7 @@ const WorkTestPage = () => {
                         <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
                             <input
                                 type="file"
-                                accept="image/*"
+                                accept="image/*,.pdf,.doc,.docx"
                                 className="hidden"
                                 ref={fileInputRef}
                                 onChange={handleFileUpload}
@@ -360,9 +384,9 @@ const WorkTestPage = () => {
                                 className="flex items-center gap-2 px-4 py-2 rounded-xl border border-dashed border-border text-muted-foreground hover:bg-muted transition-colors w-full sm:w-auto justify-center disabled:opacity-50"
                             >
                                 {isScanning ? (
-                                    <><RefreshCw className="w-4 h-4 animate-spin" /> Scanning...</>
+                                    <><RefreshCw className="w-4 h-4 animate-spin" /> Processing...</>
                                 ) : (
-                                    <><ImageIcon className="w-4 h-4" /> Upload Notes Image</>
+                                    <><UploadCloud className="w-4 h-4" /> Upload Document / Image</>
                                 )}
                             </button>
 

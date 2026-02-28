@@ -18,12 +18,17 @@ const quotes = [
 const DashboardPage = () => {
   const { xp, level, streak, totalStudyMinutes, focusHours, tasksCompleted, totalTasks, timetable, token } = useAppStore();
   const [sessions, setSessions] = useState<any[]>([]);
+  const [smartTimetable, setSmartTimetable] = useState<any[]>([]);
 
   useEffect(() => {
     if (!token) return;
-    axios.get(`${API_URL}/users/study-session`)
+    axios.get(`${API_URL}/users/study-session`, { headers: { Authorization: `Bearer ${token}` } })
       .then(res => setSessions(res.data))
       .catch(err => console.error("Failed to fetch study sessions", err));
+
+    axios.get(`${API_URL}/timetable`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(res => setSmartTimetable(res.data))
+      .catch(err => console.error("Failed to fetch smart timetable", err));
   }, [token]);
 
   const weeklyData = useMemo(() => {
@@ -106,6 +111,17 @@ const DashboardPage = () => {
     { icon: Flame, label: 'Streak', value: `${streak} days`, color: 'text-destructive' },
     { icon: TrendingUp, label: 'Productivity', value: `${productivityScore}%`, color: 'text-success' },
   ];
+
+  const groupedTimetable: Record<string, any> = {};
+  smartTimetable.forEach((slot: any) => {
+    const dObj = new Date(slot.date);
+    const dateStr = dObj.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+    if (!groupedTimetable[dateStr]) {
+      groupedTimetable[dateStr] = { date: dateStr, Morning: [], Evening: [], Night: [] };
+    }
+    groupedTimetable[dateStr][slot.timeSlot].push(slot);
+  });
+  const tableRows = Object.values(groupedTimetable);
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -233,6 +249,56 @@ const DashboardPage = () => {
           </motion.div>
         </div>
       </div>
+
+      {/* Embedded Smart Timetable */}
+      {tableRows.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 }}
+          className="mt-6 glass-card p-6 overflow-hidden"
+        >
+          <h2 className="font-display font-semibold text-xl text-foreground mb-4">Your Smart Timetable</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[600px] text-left">
+              <thead>
+                <tr className="border-b">
+                  <th className="pb-3 pt-2 px-4 font-semibold text-sm text-foreground">Date</th>
+                  <th className="pb-3 pt-2 px-4 font-semibold text-sm text-primary">Morning (6-9 AM)</th>
+                  <th className="pb-3 pt-2 px-4 font-semibold text-sm text-secondary">Evening (4-7 PM)</th>
+                  <th className="pb-3 pt-2 px-4 font-semibold text-sm text-accent">Night (8-10 PM)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y text-sm">
+                {tableRows.map((row: any, i) => (
+                  <tr key={i} className="hover:bg-muted/30 transition-colors">
+                    <td className="py-4 px-4 font-medium text-foreground whitespace-nowrap">{row.date}</td>
+                    <td className="py-4 px-4">
+                      <div className="flex flex-wrap gap-1">
+                        {row.Morning.length === 0 ? <span className="text-muted-foreground opacity-50">—</span> :
+                          row.Morning.map((s: any, idx: number) => <span key={idx} className="bg-primary/10 text-primary px-2 py-1 rounded-md text-xs font-semibold">{s.subject?.subject} (1h)</span>)
+                        }
+                      </div>
+                    </td>
+                    <td className="py-4 px-4">
+                      <div className="flex flex-wrap gap-1">
+                        {row.Evening.length === 0 ? <span className="text-muted-foreground opacity-50">—</span> :
+                          row.Evening.map((s: any, idx: number) => <span key={idx} className="bg-secondary/10 text-secondary px-2 py-1 rounded-md text-xs font-semibold">{s.subject?.subject} (1h)</span>)
+                        }
+                      </div>
+                    </td>
+                    <td className="py-4 px-4">
+                      <div className="flex flex-wrap gap-1">
+                        {row.Night.length === 0 ? <span className="text-muted-foreground opacity-50">—</span> :
+                          row.Night.map((s: any, idx: number) => <span key={idx} className="bg-accent/10 text-accent px-2 py-1 rounded-md text-xs font-semibold">{s.subject?.subject} (1h)</span>)
+                        }
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </motion.div>
+      )}
     </div>
   );
 };
